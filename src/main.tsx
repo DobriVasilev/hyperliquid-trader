@@ -1,4 +1,4 @@
-// Polyfill Buffer for Solana/Drift SDK browser compatibility
+// Polyfill Buffer for browser compatibility
 import { Buffer } from "buffer";
 (window as any).Buffer = Buffer;
 

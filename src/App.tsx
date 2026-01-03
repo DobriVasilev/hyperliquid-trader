@@ -804,14 +804,9 @@ function App() {
             });
             exchangeRef.current = exchange;
 
-            // Set API wallet address based on exchange type
-            const isSolana = EXCHANGE_CONFIGS[exchangeType].walletType === "solana";
-            if (!isSolana) {
-              const wallet = new ethers.Wallet(data.apiPrivateKey);
-              setApiWalletAddress(wallet.address);
-            } else {
-              setApiWalletAddress(data.walletAddress);
-            }
+            // Set API wallet address from private key
+            const wallet = new ethers.Wallet(data.apiPrivateKey);
+            setApiWalletAddress(wallet.address);
             setTradingEnabled(true);
 
             log.info("Exchange", `Restored connection to ${exchangeType}`);
@@ -833,10 +828,8 @@ function App() {
             setOpenOrders(ordersData);
           } catch (e) {
             log.warn("Exchange", "Failed to fetch data on unlock", e);
-            // Fallback to legacy fetch for Hyperliquid
-            if (data.exchangeType !== "drift") {
-              await fetchUserState(data.walletAddress);
-            }
+            // Fallback to legacy fetch
+            await fetchUserState(data.walletAddress);
           }
         } else {
           // No exchange initialized, try legacy fetch
@@ -857,40 +850,13 @@ function App() {
 
   // Fetch actual position data for a specific asset
   // Returns the REAL entry price and size after order fill
-  // Works with any exchange via the exchange interface
   const fetchActualPosition = async (
     address: string,
     asset: string,
-    maxAttempts: number = 5, // Reduced from 10 - limit orders may not fill immediately
+    maxAttempts: number = 5,
     delayMs: number = 500
   ): Promise<{ actualEntry: number; actualSize: number } | null> => {
-    // For Drift and other exchanges, use the exchange's getPositions method
-    if (exchangeRef.current && selectedExchange !== "hyperliquid") {
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-          const positions = await exchangeRef.current.getPositions();
-          const position = positions.find(
-            (p) => p.symbol === asset && parseFloat(p.size) !== 0
-          );
-          if (position) {
-            return {
-              actualEntry: parseFloat(position.entryPrice),
-              actualSize: Math.abs(parseFloat(position.size)),
-            };
-          }
-        } catch (e) {
-          log.warn("Trading", `Attempt ${attempt + 1} to fetch position failed`, e);
-        }
-        if (attempt < maxAttempts - 1) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      }
-      // For limit orders on Drift, position may not exist yet - this is OK
-      log.info("Trading", "Position not found - order may be pending (limit order)");
-      return null;
-    }
-
-    // For Hyperliquid, use the direct API
+    // Use the Hyperliquid API directly
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const response = await fetch(HYPERLIQUID_INFO_API, {
@@ -1195,9 +1161,7 @@ function App() {
         isBuy,
         size: parseFloat(size),
         price: parseFloat(price),
-        // Post-only causes failures on Drift when order would fill immediately
-        // Only use post-only for Hyperliquid where it works reliably
-        postOnly: !isMarket && selectedExchange === "hyperliquid",
+        postOnly: !isMarket,
       });
 
       if (result.success) {
@@ -1805,14 +1769,12 @@ function App() {
 
   // Save wallet keys
   const saveKeys = async () => {
-    const isSolana = EXCHANGE_CONFIGS[selectedExchange].walletType === "solana";
-
     // Validate wallet address format
     if (!walletAddress) {
       setError("Please enter a wallet address");
       return;
     }
-    if (!isSolana && !walletAddress.startsWith("0x")) {
+    if (!walletAddress.startsWith("0x")) {
       setError("Please enter a valid wallet address starting with 0x");
       return;
     }
@@ -1832,13 +1794,9 @@ function App() {
             privateKey: apiPrivateKey,
           });
 
-          // For EVM wallets, derive the address
-          if (!isSolana) {
-            const wallet = new ethers.Wallet(apiPrivateKey);
-            setApiWalletAddress(wallet.address);
-          } else {
-            setApiWalletAddress(walletAddress);
-          }
+          // Derive API wallet address from private key
+          const wallet = new ethers.Wallet(apiPrivateKey);
+          setApiWalletAddress(wallet.address);
 
           exchangeRef.current = exchange;
           setTradingEnabled(true);
@@ -2238,20 +2196,7 @@ function App() {
     setExecutionStatus("Placing entry order...");
 
     try {
-      // Cancel any existing orders for this asset first (prevents order stacking)
-      if (exchangeRef.current && selectedExchange === "drift") {
-        try {
-          setExecutionStatus("Canceling existing orders...");
-          await exchangeRef.current.cancelAllOrders(selectedAsset);
-          log.info("Trading", "Canceled existing orders for", selectedAsset);
-        } catch (cancelError) {
-          log.warn("Trading", "Failed to cancel existing orders (may not exist)", cancelError);
-          // Continue anyway - might not have any orders to cancel
-        }
-      }
-
       // Place entry order
-      setExecutionStatus("Placing entry order...");
       await placeOrder(isBuy, size, price, orderType === "market");
 
       // Place stop loss
@@ -2267,7 +2212,6 @@ function App() {
       }
 
       // Report success to extension EARLY (before position verification)
-      // This prevents timeout for slow on-chain transactions like Drift
       log.info("Trading", "Orders placed successfully, reporting to extension");
       invoke("report_trade_result", { success: true, error: null }).catch((e) => {
         log.debug("Trading", "Early success report failed (extension not waiting)", e);
@@ -2783,7 +2727,6 @@ function App() {
   // Setup keys screen
   if (appState === "setup_keys") {
     const exchangeConfig = EXCHANGE_CONFIGS[selectedExchange];
-    const isSolana = exchangeConfig.walletType === "solana";
 
     return (
       <AuthLayout
@@ -2794,65 +2737,30 @@ function App() {
         heroDescription="Your API wallet can execute trades but never withdraw funds. It's the safest way to trade programmatically."
       >
         <div className="mode-enter">
-          {/* Exchange Selector */}
           <div className="form-group">
-            <label>Select Exchange</label>
-            <div className="exchange-selector">
-              <button
-                type="button"
-                className={`exchange-option ${selectedExchange === "drift" ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedExchange("drift");
-                  setWalletAddress("");
-                  setApiPrivateKey("");
-                }}
-              >
-                <span className="exchange-name">Drift</span>
-                <span className="exchange-badge">US + Worldwide</span>
-                <span className="exchange-fee">-0.02% maker rebate</span>
-              </button>
-              <button
-                type="button"
-                className={`exchange-option ${selectedExchange === "hyperliquid" ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedExchange("hyperliquid");
-                  setWalletAddress("");
-                  setApiPrivateKey("");
-                }}
-              >
-                <span className="exchange-name">Hyperliquid</span>
-                <span className="exchange-badge warning">Non-US Only</span>
-                <span className="exchange-fee">0.015% maker fee</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>{isSolana ? "Solana Wallet Address" : "Ethereum Wallet Address"}</label>
+            <label>Ethereum Wallet Address</label>
             <div className="input-wrapper">
               <input
                 type="text"
                 value={walletAddress}
                 onChange={(e) => setWalletAddress(e.target.value)}
-                placeholder={isSolana ? "Your Solana address..." : "0x..."}
+                placeholder="0x..."
                 style={{ paddingRight: "16px" }}
               />
             </div>
             <span className="input-hint">
-              {isSolana
-                ? "Your Phantom/Solflare wallet address"
-                : "Your MetaMask receiving address (same on all EVM networks)"}
+              Your MetaMask receiving address (same on all EVM networks)
             </span>
           </div>
 
           <div className="form-group">
-            <label>{isSolana ? "Solana Private Key" : "API Wallet Private Key"}</label>
+            <label>API Wallet Private Key</label>
             <div className="input-wrapper">
               <input
                 type={showApiKey ? "text" : "password"}
                 value={apiPrivateKey}
                 onChange={(e) => setApiPrivateKey(e.target.value)}
-                placeholder={isSolana ? "Base58 private key..." : "0x... (optional for view-only)"}
+                placeholder="0x... (optional for view-only)"
               />
               <button
                 type="button"
@@ -2864,11 +2772,9 @@ function App() {
               </button>
             </div>
             <span className="input-hint">
-              {isSolana
-                ? "Required for trading. Export from Phantom: Settings → Security → Export Private Key"
-                : "Required for trading. API wallets cannot withdraw."}
+              Required for trading. API wallets cannot withdraw.
             </span>
-            {!isSolana && apiPrivateKey && apiPrivateKey.length >= 64 && (
+            {apiPrivateKey && apiPrivateKey.length >= 64 && (
               <div className="derived-address">
                 <span className="derived-label">Derived address: </span>
                 <code className="derived-value">
@@ -2900,23 +2806,13 @@ function App() {
           </button>
 
           <div className="info-box">
-            <strong>How to get started with {exchangeConfig.name}</strong>
-            {isSolana ? (
-              <ul>
-                <li>Install Phantom wallet extension</li>
-                <li>Create or import a Solana wallet</li>
-                <li>Go to app.drift.trade and connect</li>
-                <li>Deposit USDC to start trading</li>
-                <li>Export private key from Phantom settings</li>
-              </ul>
-            ) : (
-              <ul>
-                <li>Go to app.hyperliquid.xyz</li>
-                <li>Click your address → API Wallets</li>
-                <li>Create a new API wallet</li>
-                <li>Copy the private key</li>
-              </ul>
-            )}
+            <strong>How to get started with Hyperliquid</strong>
+            <ul>
+              <li>Go to app.hyperliquid.xyz</li>
+              <li>Click your address → API Wallets</li>
+              <li>Create a new API wallet</li>
+              <li>Copy the private key</li>
+            </ul>
           </div>
         </div>
 

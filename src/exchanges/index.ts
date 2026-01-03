@@ -2,17 +2,13 @@
 
 export * from "./types";
 export { HyperliquidExchange, createHyperliquidExchange } from "./hyperliquid";
-export { DriftExchange, createDriftExchange } from "./drift";
 
 import { Exchange, ExchangeType } from "./types";
 import { createHyperliquidExchange } from "./hyperliquid";
-import { createDriftExchange } from "./drift";
 
 // Factory to create exchange instance by type
 export function createExchange(type: ExchangeType, isTestnet: boolean = false): Exchange {
   switch (type) {
-    case "drift":
-      return createDriftExchange(isTestnet);
     case "hyperliquid":
       return createHyperliquidExchange(isTestnet);
     default:
@@ -20,5 +16,5 @@ export function createExchange(type: ExchangeType, isTestnet: boolean = false): 
   }
 }
 
-// Default exchange (Drift for US support)
-export const DEFAULT_EXCHANGE: ExchangeType = "drift";
+// Default exchange
+export const DEFAULT_EXCHANGE: ExchangeType = "hyperliquid";

@@ -1,8 +1,8 @@
 // Common exchange types - shared across all exchange implementations
 
-export type ExchangeType = "drift" | "hyperliquid";
+export type ExchangeType = "hyperliquid";
 
-export type WalletType = "solana" | "evm";
+export type WalletType = "evm";
 
 export interface ExchangeConfig {
   type: ExchangeType;
@@ -14,14 +14,6 @@ export interface ExchangeConfig {
 }
 
 export const EXCHANGE_CONFIGS: Record<ExchangeType, ExchangeConfig> = {
-  drift: {
-    type: "drift",
-    name: "Drift",
-    walletType: "solana",
-    testnetAvailable: true,
-    makerFee: -0.0002,  // -0.02% rebate
-    takerFee: 0.001,    // 0.10%
-  },
   hyperliquid: {
     type: "hyperliquid",
     name: "Hyperliquid",
@@ -101,18 +93,13 @@ export interface MarketPrices {
   [asset: string]: number;
 }
 
-// Credentials interface - different for each exchange
+// Credentials interface
 export interface HyperliquidCredentials {
   walletAddress: string;
   privateKey: string;
 }
 
-export interface DriftCredentials {
-  walletAddress: string;
-  privateKey: string;  // Solana private key (base58)
-}
-
-export type ExchangeCredentials = HyperliquidCredentials | DriftCredentials;
+export type ExchangeCredentials = HyperliquidCredentials;
 
 // The main exchange interface - all exchanges must implement this
 export interface Exchange {
