@@ -1,12 +1,15 @@
-// TradingView Bridge v1.6.0 - Works on both TradingView.com and app.hyperliquid.xyz
+// TradingView Bridge v1.7.0 - Works on TradingView.com, app.hyperliquid.xyz, and drift.trade
 console.log('[TV Bridge] Script starting...');
 
 const BRIDGE_PORT = 3456;
 const BRIDGE_URL = `http://localhost:${BRIDGE_PORT}`;
 const IS_HYPERLIQUID = window.location.hostname === 'app.hyperliquid.xyz';
+const IS_DRIFT = window.location.hostname === 'app.drift.trade' || window.location.hostname === 'drift.trade';
+const IS_EXCHANGE_SITE = IS_HYPERLIQUID || IS_DRIFT;
 const IS_IN_IFRAME = window !== window.top;
 
-console.log('[TV Bridge] Site:', IS_HYPERLIQUID ? 'Hyperliquid' : 'TradingView', '| In iframe:', IS_IN_IFRAME);
+const SITE_NAME = IS_HYPERLIQUID ? 'Hyperliquid' : IS_DRIFT ? 'Drift' : 'TradingView';
+console.log('[TV Bridge] Site:', SITE_NAME, '| In iframe:', IS_IN_IFRAME);
 
 let currentOverlay = null;
 let currentPositionData = null;
@@ -26,10 +29,10 @@ let lastOverlayPosition = null; // Remember position for minimize/maximize
 let settings = { risk: 1.00, leverage: 25, useMarketPrice: true, asset: 'BTC', price: 0 };
 
 // =====================================================
-// IFRAME COMMUNICATION (for Hyperliquid)
+// IFRAME COMMUNICATION (for Hyperliquid/Drift)
 // =====================================================
 
-if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
+if (IS_EXCHANGE_SITE && !IS_IN_IFRAME) {
   window.addEventListener('message', (event) => {
     if (event.origin !== window.location.origin) return;
     const { type, data } = event.data || {};
@@ -580,10 +583,10 @@ function createOverlay(data) {
             </linearGradient>
           </defs>
           <text x="16" y="32" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
-            font-size="38" font-style="italic" font-weight="400" fill="url(#tvBridgeLuxGrad)" letter-spacing="-1">H</text>
+            font-size="38" font-style="italic" font-weight="400" fill="url(#tvBridgeLuxGrad)" letter-spacing="-1">${IS_HYPERLIQUID ? 'H' : IS_DRIFT ? 'D' : 'T'}</text>
         </svg>
       </div>
-      <span class="tv-bridge-title">Hyperliquid Trader</span>
+      <span class="tv-bridge-title">${SITE_NAME} Trader</span>
       <div class="tv-bridge-header-buttons">
         <button class="tv-bridge-btn-icon tv-bridge-pin ${isPinned ? 'active' : ''}" title="Pin overlay (keep visible when dialog closes)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -643,8 +646,8 @@ function createOverlay(data) {
 
     <div class="tv-bridge-footer">
       ${isPinned ? '<div class="tv-bridge-pinned-indicator">PINNED</div>' : ''}
-      ${IS_HYPERLIQUID ? 'Using Hyperliquid chart - exact price match!' : 'Tip: Use BYBIT:BTCUSDT.P or Hyperliquid chart'}<br>
-      TradingView Bridge v1.6.0
+      ${IS_EXCHANGE_SITE ? `Using ${SITE_NAME} chart - exact price match!` : 'Tip: Use exchange chart or BYBIT:BTCUSDT.P'}<br>
+      TradingView Bridge v1.8.0
     </div>
   `;
 
@@ -818,13 +821,13 @@ function createOverlay(data) {
       if (result.success) {
         enterBtn.classList.remove('loading');
         enterBtn.classList.add('success');
-        enterBtn.innerHTML = `&#x2713; Trade Sent!`;
+        enterBtn.innerHTML = `&#x2713; Trade Placed!`;
 
         // Show success banner notification
         const banner = document.createElement('div');
         banner.className = `tv-bridge-success-banner ${currentPositionData.direction}`;
         const tfLabel = timeframe ? ` (${timeframe})` : '';
-        banner.innerHTML = `&#x2713; ${currentPositionData.direction.toUpperCase()}${tfLabel} Trade Entered!`;
+        banner.innerHTML = `&#x2713; ${currentPositionData.direction.toUpperCase()}${tfLabel} Trade Placed!`;
         document.body.appendChild(banner);
 
         // Remove banner after 3 seconds
@@ -852,12 +855,32 @@ function createOverlay(data) {
           }, 500);
         }, 1500);
       } else {
-        throw new Error(result.error || 'Trade failed');
+        // Show actual error message from app
+        const errorMsg = result.error || 'Trade failed';
+        throw new Error(errorMsg);
       }
     } catch (e) {
       enterBtn.classList.remove('loading');
       enterBtn.classList.add('error');
-      enterBtn.innerHTML = `App not running`;
+
+      // Show error message - truncate if too long
+      const errorText = e.message || 'App not running';
+      const displayError = errorText.length > 30 ? errorText.substring(0, 30) + '...' : errorText;
+      enterBtn.innerHTML = `&#x2717; ${displayError}`;
+
+      // Also show error banner
+      const banner = document.createElement('div');
+      banner.className = 'tv-bridge-success-banner short'; // Red styling
+      banner.innerHTML = `&#x2717; ${errorText}`;
+      document.body.appendChild(banner);
+
+      setTimeout(() => {
+        if (banner && document.body.contains(banner)) {
+          banner.style.opacity = '0';
+          banner.style.transition = 'opacity 0.3s';
+          setTimeout(() => banner.remove(), 300);
+        }
+      }, 4000);
 
       setTimeout(() => {
         if (enterBtn && document.contains(enterBtn)) {
@@ -865,7 +888,7 @@ function createOverlay(data) {
           enterBtn.disabled = false;
           enterBtn.innerHTML = `Enter ${currentPositionData?.direction || 'long'}`;
         }
-      }, 3000);
+      }, 4000);
     }
   });
 
@@ -905,7 +928,7 @@ function stopPriceUpdates() {
 // OVERLAY MANAGEMENT
 // =====================================================
 
-async function showOverlay(data) {
+function showOverlay(data) {
   isUpdatingOverlay = true;
   try {
     injectStyles();
@@ -923,13 +946,22 @@ async function showOverlay(data) {
     }
 
     if (!currentOverlay) {
-      await fetchSettings();
+      // Create overlay immediately with current/default settings (no await)
       currentOverlay = createOverlay(data);
       document.body.appendChild(currentOverlay);
       // If was minimized before, restore that state
       if (isMinimized) {
         currentOverlay.classList.add('minimized');
       }
+      // Fetch settings in background and update inputs if needed
+      fetchSettings().then(() => {
+        if (currentOverlay) {
+          const riskInput = currentOverlay.querySelector('#tv-bridge-risk');
+          const leverageInput = currentOverlay.querySelector('#tv-bridge-leverage');
+          if (riskInput) riskInput.value = settings.risk;
+          if (leverageInput) leverageInput.value = settings.leverage;
+        }
+      });
     } else {
       updateOverlayData(data);
     }
@@ -1071,19 +1103,19 @@ function checkForDialog() {
 
       const data = extractPositionData(dialog);
       if (data) {
-        if (IS_HYPERLIQUID && IS_IN_IFRAME) {
+        if (IS_EXCHANGE_SITE && IS_IN_IFRAME) {
           sendToParent('TV_BRIDGE_SHOW_OVERLAY', data);
         } else {
           showOverlay(data);
         }
         observeDialog(dialog);
       }
-    } else if ((currentOverlay || (IS_HYPERLIQUID && IS_IN_IFRAME)) && !closeTimer && !isPinned) {
+    } else if ((currentOverlay || (IS_EXCHANGE_SITE && IS_IN_IFRAME)) && !closeTimer && !isPinned) {
       // Don't hide if pinned
       closeTimer = setTimeout(() => {
         const stillExists = document.querySelector('[data-dialog-name="Long Position"], [data-dialog-name="Short Position"]');
         if (!stillExists && !isPinned) {
-          if (IS_HYPERLIQUID && IS_IN_IFRAME) {
+          if (IS_EXCHANGE_SITE && IS_IN_IFRAME) {
             sendToParent('TV_BRIDGE_HIDE_OVERLAY', null);
           } else {
             removeOverlay();
@@ -1104,7 +1136,7 @@ function observeDialog(dialog) {
       debounceTimer = setTimeout(() => {
         const data = extractPositionData(dialog);
         if (data) {
-          if (IS_HYPERLIQUID && IS_IN_IFRAME) {
+          if (IS_EXCHANGE_SITE && IS_IN_IFRAME) {
             sendToParent('TV_BRIDGE_UPDATE_OVERLAY', data);
           } else {
             showOverlay(data);
@@ -1119,7 +1151,7 @@ function observeDialog(dialog) {
     debounceTimer = setTimeout(() => {
       const data = extractPositionData(dialog);
       if (data) {
-        if (IS_HYPERLIQUID && IS_IN_IFRAME) {
+        if (IS_EXCHANGE_SITE && IS_IN_IFRAME) {
           sendToParent('TV_BRIDGE_UPDATE_OVERLAY', data);
         } else {
           showOverlay(data);
@@ -1141,7 +1173,7 @@ function observeDialog(dialog) {
 // =====================================================
 
 function startWatching() {
-  if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
+  if (IS_EXCHANGE_SITE && !IS_IN_IFRAME) {
     console.log('[TV Bridge] Main page mode - waiting for iframe');
     return;
   }
@@ -1158,41 +1190,69 @@ try {
   } else {
     document.addEventListener('DOMContentLoaded', startWatching);
   }
+  // Prefetch settings so they're ready when overlay opens
+  fetchSettings();
 } catch (e) {}
 
 // =====================================================
-// HYPERLIQUID FULLSCREEN CHART (Shift+G)
+// FULLSCREEN CHART (Shift+G) - Works on Hyperliquid & Drift
 // Makes chart fullscreen while keeping drawing tools
 // =====================================================
 
-if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
-  console.log('[TV Bridge] Initializing fullscreen chart feature...');
+if (IS_EXCHANGE_SITE && !IS_IN_IFRAME) {
+  console.log('[TV Bridge] Initializing fullscreen chart feature for', SITE_NAME);
 
-  let hlFullscreen = false;
-  let hlChartGrid = null;
-  let hlOriginalStyle = '';
-  let hlFsBtn = null;
+  let fsFullscreen = false;
+  let fsChartElement = null;
+  let fsOriginalStyle = '';
+  let fsFsBtn = null;
 
-  function hlGetChartGrid() {
+  // Get the chart container - both Hyperliquid and Drift use #tv_chart_container
+  function fsGetChartContainer() {
     const tv = document.getElementById('tv_chart_container');
     if (!tv) return null;
-    let el = tv;
-    while (el && !el.classList.contains('react-grid-item')) {
-      el = el.parentElement;
+
+    if (IS_HYPERLIQUID) {
+      // Hyperliquid: #tv_chart_container is inside .react-grid-item
+      let el = tv;
+      while (el && !el.classList.contains('react-grid-item')) {
+        el = el.parentElement;
+      }
+      return el;
+    } else if (IS_DRIFT) {
+      // Drift: #tv_chart_container itself or find a suitable parent
+      // Go up to find a container that fills most of the screen
+      let el = tv;
+      while (el && el.parentElement) {
+        const parent = el.parentElement;
+        // Stop at body or if parent is significantly larger than the chart area
+        if (parent.tagName === 'BODY' || parent.tagName === 'HTML') break;
+        // Check if this is a good container (has reasonable size)
+        if (parent.offsetWidth > window.innerWidth * 0.4 && parent.offsetHeight > window.innerHeight * 0.3) {
+          el = parent;
+        } else {
+          break;
+        }
+      }
+      return el;
     }
-    return el;
+    return tv; // Fallback: just return the container itself
   }
 
-  function hlEnableFullscreen() {
-    hlChartGrid = hlGetChartGrid();
-    if (!hlChartGrid) {
-      console.log('[TV Bridge] Chart grid not found for fullscreen');
+  function fsHasChart() {
+    return !!document.getElementById('tv_chart_container');
+  }
+
+  function fsEnableFullscreen() {
+    fsChartElement = fsGetChartContainer();
+    if (!fsChartElement) {
+      console.log('[TV Bridge] Chart container not found for fullscreen');
       return;
     }
 
-    hlOriginalStyle = hlChartGrid.getAttribute('style') || '';
+    fsOriginalStyle = fsChartElement.getAttribute('style') || '';
 
-    hlChartGrid.style.cssText = `
+    fsChartElement.style.cssText = `
       position: fixed !important;
       top: 0 !important;
       left: 0 !important;
@@ -1200,58 +1260,62 @@ if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
       height: 100vh !important;
       z-index: 99999 !important;
       transform: none !important;
+      background: #131722 !important;
     `;
 
     document.body.style.overflow = 'hidden';
-    hlFullscreen = true;
-    hlUpdateFsBtn();
+    fsFullscreen = true;
+    fsUpdateBtn();
     setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
     console.log('[TV Bridge] Fullscreen enabled');
   }
 
-  function hlDisableFullscreen() {
-    if (hlChartGrid) {
-      hlChartGrid.setAttribute('style', hlOriginalStyle);
+  function fsDisableFullscreen() {
+    if (fsChartElement) {
+      fsChartElement.setAttribute('style', fsOriginalStyle);
     }
     document.body.style.overflow = '';
-    hlFullscreen = false;
-    hlUpdateFsBtn();
+    fsFullscreen = false;
+    fsUpdateBtn();
     setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
     console.log('[TV Bridge] Fullscreen disabled');
   }
 
-  function hlToggleFullscreen() {
-    hlFullscreen ? hlDisableFullscreen() : hlEnableFullscreen();
+  function fsToggleFullscreen() {
+    fsFullscreen ? fsDisableFullscreen() : fsEnableFullscreen();
   }
 
-  function hlCreateFsBtn() {
-    if (document.getElementById('hl-fullscreen-btn')) {
-      hlFsBtn = document.getElementById('hl-fullscreen-btn');
+  function fsCreateBtn() {
+    if (document.getElementById('tv-bridge-fullscreen-btn')) {
+      fsFsBtn = document.getElementById('tv-bridge-fullscreen-btn');
       return;
     }
-    if (!document.getElementById('tv_chart_container')) return;
+    if (!fsHasChart()) return;
 
-    hlFsBtn = document.createElement('button');
-    hlFsBtn.id = 'hl-fullscreen-btn';
-    hlFsBtn.onclick = hlToggleFullscreen;
-    document.body.appendChild(hlFsBtn);
-    hlUpdateFsBtn();
+    fsFsBtn = document.createElement('button');
+    fsFsBtn.id = 'tv-bridge-fullscreen-btn';
+    fsFsBtn.onclick = fsToggleFullscreen;
+    document.body.appendChild(fsFsBtn);
+    fsUpdateBtn();
     console.log('[TV Bridge] Fullscreen button created');
   }
 
-  function hlUpdateFsBtn() {
-    if (!hlFsBtn) return;
+  function fsUpdateBtn() {
+    if (!fsFsBtn) return;
 
-    hlFsBtn.style.cssText = `
+    // Different accent colors for different exchanges
+    const accentColor = IS_HYPERLIQUID ? '#5EEAD4' : IS_DRIFT ? '#E879F9' : '#3B82F6';
+
+    fsFsBtn.style.cssText = `
       position: fixed;
-      top: ${hlFullscreen ? '50px' : '8px'};
+      top: ${fsFullscreen ? '50px' : '8px'};
       right: 8px;
       z-index: 9999999;
       background: rgba(26, 46, 56, 0.9);
-      border: 1px solid #5EEAD4;
+      border: 1px solid ${accentColor};
       border-radius: 4px;
       padding: 6px;
-      color: #5EEAD4;
+      color: ${accentColor};
       font: 11px system-ui;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -1260,10 +1324,10 @@ if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
       max-width: 28px;
     `;
 
-    hlFsBtn.onmouseenter = () => { hlFsBtn.style.maxWidth = '200px'; hlFsBtn.style.padding = '6px 10px'; };
-    hlFsBtn.onmouseleave = () => { hlFsBtn.style.maxWidth = '28px'; hlFsBtn.style.padding = '6px'; };
+    fsFsBtn.onmouseenter = () => { fsFsBtn.style.maxWidth = '200px'; fsFsBtn.style.padding = '6px 10px'; };
+    fsFsBtn.onmouseleave = () => { fsFsBtn.style.maxWidth = '28px'; fsFsBtn.style.padding = '6px'; };
 
-    hlFsBtn.innerHTML = hlFullscreen
+    fsFsBtn.innerHTML = fsFullscreen
       ? `<span style="margin-right:4px">✕</span><span>Exit (Esc)</span>`
       : `<span style="margin-right:4px">⛶</span><span>Fullscreen (⇧G)</span>`;
   }
@@ -1274,19 +1338,19 @@ if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       e.preventDefault();
       e.stopPropagation();
-      hlToggleFullscreen();
+      fsToggleFullscreen();
     }
-    if (e.key === 'Escape' && hlFullscreen) {
+    if (e.key === 'Escape' && fsFullscreen) {
       e.preventDefault();
-      hlDisableFullscreen();
+      fsDisableFullscreen();
     }
   }, true);
 
   // Wait for chart and create button
-  function hlWaitForChart() {
+  function fsWaitForChart() {
     const check = () => {
-      if (document.getElementById('tv_chart_container')) {
-        hlCreateFsBtn();
+      if (fsHasChart()) {
+        fsCreateBtn();
       } else {
         setTimeout(check, 1000);
       }
@@ -1296,12 +1360,12 @@ if (IS_HYPERLIQUID && !IS_IN_IFRAME) {
 
   // Watch for SPA navigation
   new MutationObserver(() => {
-    if (!document.getElementById('hl-fullscreen-btn') && document.getElementById('tv_chart_container')) {
-      hlCreateFsBtn();
+    if (!document.getElementById('tv-bridge-fullscreen-btn') && fsHasChart()) {
+      fsCreateBtn();
     }
   }).observe(document.body, { childList: true, subtree: true });
 
-  hlWaitForChart();
+  fsWaitForChart();
 }
 
 console.log('[TV Bridge] Ready');

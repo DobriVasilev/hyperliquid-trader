@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
-import { ethers, keccak256 } from "ethers";
-import { encode } from "@msgpack/msgpack";
+import { useEffect, useCallback, useRef, useLayoutEffect } from "react";
+import { ethers } from "ethers";
 import { load } from "@tauri-apps/plugin-store";
 import { open } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
@@ -10,14 +9,23 @@ import { writeTextFile, writeFile, mkdir, exists, BaseDirectory } from "@tauri-a
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
-// TradingView Bridge position data
-interface TVPositionData {
-  direction: "long" | "short";
-  entry: number;
-  stopLoss: number;
-  takeProfit: number | null;
-  timestamp: number;
-}
+// Exchange abstraction
+import {
+  ExchangeType,
+  Exchange,
+  EXCHANGE_CONFIGS,
+  createExchange,
+} from "./exchanges";
+
+// Zustand stores
+import {
+  useExchangeStore,
+  useSettingsStore,
+  useTradeStore,
+  useAppStore,
+  type TVPositionData,
+  type TradeHistoryItem,
+} from "./stores";
 
 interface TVTradeRequest {
   direction: string;
@@ -88,7 +96,6 @@ const getErrorMessage = (e: unknown): string => {
 };
 
 const HYPERLIQUID_INFO_API = "https://api.hyperliquid.xyz/info";
-const HYPERLIQUID_EXCHANGE_API = "https://api.hyperliquid.xyz/exchange";
 
 // GitHub URL for TradingView Bridge extension download
 // TODO: Update YOUR_USERNAME/YOUR_REPO when you create the GitHub repo
@@ -192,12 +199,7 @@ async function hashPassword(password: string, salt: Uint8Array): Promise<string>
   return btoa(String.fromCharCode(...new Uint8Array(derivedBits)));
 }
 
-interface AccountInfo {
-  balance: string;
-  available: string;
-  totalMarginUsed: string;
-  totalPositionValue: string;
-}
+// AccountInfo is imported from exchanges/types via useExchangeStore
 
 interface Position {
   symbol: string;
@@ -216,144 +218,17 @@ interface OpenOrder {
   price: string;
   orderType: string;
   timestamp: number;
-  oid: number;
+  oid: number | string;
 }
 
 interface AssetInfo {
   name: string;
   szDecimals: number;
   maxLeverage: number;
-  assetId: number;
+  assetId: number | string;
 }
 
-interface TradeHistoryItem {
-  id: string;
-  timestamp: number;
-  symbol: string;
-  direction: "long" | "short";
-  entry: number;
-  sl: number;
-  tp?: number;
-  qty: number;
-  risk: number;
-  leverage: number;
-  status: "pending" | "filled" | "cancelled" | "closed";
-  closePrice?: number;
-  closeTimestamp?: number;
-  pnl?: number;
-  result?: "win" | "loss" | "breakeven";
-  sheetsLogged?: boolean;  // Whether this trade was sent to Google Sheets
-  sheetsTimestamp?: string; // ISO timestamp used as spreadsheet row identifier
-}
-
-interface UnfilledOrder {
-  symbol: string;
-  direction: "long" | "short";
-  qty: number;
-  originalPrice: number;
-  timestamp: number;
-}
-
-// Hyperliquid EIP-712 domain for phantom agent signing
-const PHANTOM_DOMAIN = {
-  name: "Exchange",
-  version: "1",
-  chainId: 1337,
-  verifyingContract: "0x0000000000000000000000000000000000000000",
-};
-
-// Agent types for EIP-712 signing
-const AGENT_TYPES = {
-  Agent: [
-    { name: "source", type: "string" },
-    { name: "connectionId", type: "bytes32" },
-  ],
-};
-
-// Normalize trailing zeros for msgpack encoding (matches Hyperliquid SDK)
-function normalizeTrailingZeros(obj: unknown): unknown {
-  if (typeof obj === "string") {
-    // Remove trailing zeros after decimal point
-    if (obj.includes(".")) {
-      const trimmed = obj.replace(/\.?0+$/, "");
-      return trimmed === "" ? "0" : trimmed;
-    }
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(normalizeTrailingZeros);
-  }
-  if (obj && typeof obj === "object") {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[key] = normalizeTrailingZeros(value);
-    }
-    return result;
-  }
-  return obj;
-}
-
-// Convert address to bytes
-function addressToBytes(address: string): Uint8Array {
-  const hex = address.startsWith("0x") ? address.slice(2) : address;
-  const bytes = new Uint8Array(20);
-  for (let i = 0; i < 20; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-// Compute action hash for Hyperliquid signing
-function actionHash(action: unknown, vaultAddress: string | null, nonce: number): string {
-  const normalizedAction = normalizeTrailingZeros(action);
-  const msgPackBytes = encode(normalizedAction);
-  const additionalBytesLength = vaultAddress === null ? 9 : 29;
-  const data = new Uint8Array(msgPackBytes.length + additionalBytesLength);
-  data.set(msgPackBytes);
-  const view = new DataView(data.buffer);
-  view.setBigUint64(msgPackBytes.length, BigInt(nonce), false);
-  if (vaultAddress === null) {
-    view.setUint8(msgPackBytes.length + 8, 0);
-  } else {
-    view.setUint8(msgPackBytes.length + 8, 1);
-    data.set(addressToBytes(vaultAddress), msgPackBytes.length + 9);
-  }
-  return keccak256(data);
-}
-
-// Construct phantom agent for signing
-function constructPhantomAgent(hash: string, isMainnet: boolean = true) {
-  return { source: isMainnet ? "a" : "b", connectionId: hash };
-}
-
-// Format price for Hyperliquid API
-// Hyperliquid requires prices to have max 5 significant figures and be properly formatted
-const formatHyperliquidPrice = (price: number | string): string => {
-  const num = typeof price === 'string' ? parseFloat(price) : price;
-  if (isNaN(num) || num <= 0) return '0';
-
-  // Round to 5 significant figures
-  const magnitude = Math.floor(Math.log10(Math.abs(num)));
-  const scale = Math.pow(10, 4 - magnitude); // 5 sig figs = 4 - magnitude
-  const rounded = Math.round(num * scale) / scale;
-
-  // Determine appropriate decimal places (max 8, but based on price magnitude)
-  let decimals: number;
-  if (num >= 10000) {
-    decimals = 1; // BTC-like prices
-  } else if (num >= 100) {
-    decimals = 2; // ETH-like prices
-  } else if (num >= 1) {
-    decimals = 4; // Most altcoins
-  } else {
-    decimals = 6; // Small price coins
-  }
-
-  return rounded.toFixed(decimals);
-};
-
-// App states
-type AppState = "loading" | "biometric_prompt" | "setup_password" | "unlock" | "setup_keys" | "dashboard";
+// TradeHistoryItem, UnfilledOrder types, and AppState are now imported from stores
 
 // Icon Components
 const ShieldIcon = () => (
@@ -584,80 +459,108 @@ function getOrderLabel(order: OpenOrder, positions: Position[]): { label: string
 }
 
 function App() {
-  // App state
-  const [appState, setAppState] = useState<AppState>("loading");
-  const [sessionPassword, setSessionPassword] = useState("");
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricFailed, setBiometricFailed] = useState(false);
+  // App state - from Zustand store
+  const {
+    appState, setAppState,
+    sessionPassword, setSessionPassword,
+    biometricAvailable, setBiometricAvailable,
+    biometricFailed, setBiometricFailed,
+    passwordInput, setPasswordInput,
+    confirmPasswordInput, setConfirmPasswordInput,
+    showPassword, setShowPassword,
+    showConfirmPassword, setShowConfirmPassword,
+    showApiKey, setShowApiKey,
+    walletAddress, setWalletAddress,
+    apiPrivateKey, setApiPrivateKey,
+    apiWalletAddress: _apiWalletAddress, setApiWalletAddress,
+    tradingEnabled, setTradingEnabled,
+    loading, setLoading,
+    tradingLoading, setTradingLoading,
+    error, setError,
+    success, setSuccess,
+    activeTab, setActiveTab,
+    showSettings, setShowSettings,
+    tvPosition, setTvPosition,
+    tvOverlayVisible, setTvOverlayVisible,
+    pendingExtensionTrade, setPendingExtensionTrade,
+    tradeHistory, setTradeHistory,
+    updateAvailable, setUpdateAvailable,
+    isUpdating, setIsUpdating,
+  } = useAppStore();
 
-  // Form inputs
-  const [passwordInput, setPasswordInput] = useState("");
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
+  // Exchange selection - from Zustand store
+  const { selectedExchange, setSelectedExchange } = useSettingsStore();
+  const exchangeRef = useRef<Exchange | null>(null);
 
-  // Wallet data
-  const [walletAddress, setWalletAddress] = useState("");
-  const [apiPrivateKey, setApiPrivateKey] = useState("");
-  const [apiWalletAddress, setApiWalletAddress] = useState("");
-  const [tradingEnabled, setTradingEnabled] = useState(false);
+  // Account data - from Zustand store
+  const {
+    prices, setPrices,
+    accountInfo, setAccountInfo,
+    positions, setPositions,
+    openOrders, setOpenOrders,
+    assets, setAssets,
+    assetIds: _assetIds, setAssetIds,
+  } = useExchangeStore();
 
-  // Loading & errors
-  const [loading, setLoading] = useState(false);
-  const [tradingLoading, setTradingLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  // Account data
-  const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
-  const [activeTab, setActiveTab] = useState<"positions" | "orders" | "history">("positions");
-  const [assets, setAssets] = useState<Map<string, AssetInfo>>(new Map());
-  const [assetIds, setAssetIds] = useState<Map<string, number>>(new Map());
-  const [prices, setPrices] = useState<Map<string, string>>(new Map());
-
-  // Trading inputs
-  const [selectedAsset, setSelectedAsset] = useState("BTC");
-  const [riskAmount, setRiskAmount] = useState("1.00");
-  const [entryPrice, setEntryPrice] = useState("");
-  const [stopLoss, setStopLoss] = useState("");
-  const [takeProfit, setTakeProfit] = useState("");
-  const [leverage, setLeverage] = useState("25");
-  const [autoUpdateEntry, setAutoUpdateEntry] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [orderType, setOrderType] = useState<"market" | "limit">("limit");
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [tradeHistory, setTradeHistory] = useState<TradeHistoryItem[]>([]);
+  // Trading inputs - from Zustand store
+  const {
+    selectedAsset, setSelectedAsset,
+    riskAmount, setRiskAmount,
+    entryPrice, setEntryPrice,
+    stopLoss, setStopLoss,
+    takeProfit, setTakeProfit,
+    leverage, setLeverage,
+    autoUpdateEntry, setAutoUpdateEntry,
+    orderType, setOrderType,
+    showConfirmModal, setShowConfirmModal,
+    direction, setDirection,
+    // Calculations
+    calculatedQty, setCalculatedQty,
+    calculatedMargin, setCalculatedMargin,
+    calculatedLiquidation, setCalculatedLiquidation,
+    estimatedPnl, setEstimatedPnl,
+    rrRatio, setRrRatio,
+    slDistance, setSlDistance,
+    tpDistance, setTpDistance,
+    // Warnings
+    liqWarning, setLiqWarning,
+    minOrderWarning, setMinOrderWarning,
+    balanceWarning, setBalanceWarning,
+    priceOrderError, setPriceOrderError,
+    // Execution
+    isExecuting, setIsExecuting,
+    executionStatus, setExecutionStatus,
+    showRetryModal, setShowRetryModal,
+    retryEntryPrice, setRetryEntryPrice,
+    unfilledOrder, setUnfilledOrder,
+  } = useTradeStore();
   const tradeHistoryRef = useRef<TradeHistoryItem[]>([]);
-  const [sidebarPosition, setSidebarPosition] = useState<"left" | "right">("right");
+  // Ref for deduplicating trade requests (survives React StrictMode double-mount)
+  const lastTradeTimestampRef = useRef<number>(0);
+  // Ref for content-based deduplication (prevents retries from extension)
+  const lastTradeParamsRef = useRef<string>("");
 
-  // Advanced settings (auto-saved per profile)
-  const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
-  const [autoAdjustLeverage, setAutoAdjustLeverage] = useState(true);
-  const [autoRetryUnfilled, setAutoRetryUnfilled] = useState(false);
-  const [liqWarningDistance, setLiqWarningDistance] = useState(300);
-  const [liqDangerDistance, setLiqDangerDistance] = useState(100);
-  const [pnlTolerance, setPnlTolerance] = useState(0.10); // 10% tolerance
-  const [updateEntryOnConfirm, setUpdateEntryOnConfirm] = useState(false);
-  const [copyReportToClipboard, setCopyReportToClipboard] = useState(false);
-  const [debugLogging, setDebugLogging] = useState(false);
-  const [unfilledWaitTime, setUnfilledWaitTime] = useState(30000); // 30 seconds
-  const [maxRiskMultiplier, setMaxRiskMultiplier] = useState(2.0);
-  const [feeBuffer, setFeeBuffer] = useState(0.05); // 5% buffer for fees/slippage
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [extensionSkipConfirm, setExtensionSkipConfirm] = useState(true); // Skip confirmation for extension trades by default
-  const [extensionEnabled, setExtensionEnabled] = useState(true); // Enable/disable TradingView Bridge extension
+  // Advanced settings - from Zustand store
+  const {
+    sidebarPosition, setSidebarPosition,
+    googleSheetsUrl, setGoogleSheetsUrl,
+    autoAdjustLeverage, setAutoAdjustLeverage,
+    autoRetryUnfilled, setAutoRetryUnfilled,
+    liqWarningDistance, setLiqWarningDistance,
+    liqDangerDistance, setLiqDangerDistance,
+    pnlTolerance, setPnlTolerance,
+    updateEntryOnConfirm, setUpdateEntryOnConfirm,
+    copyReportToClipboard, setCopyReportToClipboard,
+    debugLogging, setDebugLogging,
+    unfilledWaitTime, setUnfilledWaitTime,
+    maxRiskMultiplier, setMaxRiskMultiplier,
+    feeBuffer, setFeeBuffer,
+    settingsLoaded, setSettingsLoaded,
+    extensionSkipConfirm, setExtensionSkipConfirm,
+    extensionEnabled, setExtensionEnabled,
+  } = useSettingsStore();
 
-  // App update state
-  const [updateAvailable, setUpdateAvailable] = useState<{ version: string; notes: string } | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  // TradingView Bridge state
-  const [tvPosition, setTvPosition] = useState<TVPositionData | null>(null);
-  const [tvOverlayVisible, setTvOverlayVisible] = useState(false);
-  const [pendingExtensionTrade, setPendingExtensionTrade] = useState(false); // Flag to auto-execute extension trade
+  // App update state & TradingView Bridge state now come from useAppStore above
 
   // Debug: Log overlay visibility changes
   useEffect(() => {
@@ -733,7 +636,8 @@ function App() {
         setLeverage(settings.leverage ?? "25");
         setSelectedAsset(settings.selectedAsset ?? "BTC");
         setOrderType(settings.orderType ?? "limit");
-        setAutoUpdateEntry(settings.autoUpdateEntry ?? true);
+        // Always start with autoUpdateEntry enabled (don't persist this setting)
+        setAutoUpdateEntry(true);
         setSidebarPosition(settings.sidebarPosition ?? "right");
         setGoogleSheetsUrl(settings.googleSheetsUrl ?? "");
         setAutoAdjustLeverage(settings.autoAdjustLeverage ?? true);
@@ -850,26 +754,7 @@ function App() {
     }
   }, [walletAddress, appState, settingsLoaded, loadSettings]);
 
-  // Trade execution state
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [executionStatus, setExecutionStatus] = useState("");
-  const [showRetryModal, setShowRetryModal] = useState(false);
-  const [retryEntryPrice, setRetryEntryPrice] = useState("");
-  const [unfilledOrder, setUnfilledOrder] = useState<UnfilledOrder | null>(null);
-
-  // Calculated values
-  const [calculatedQty, setCalculatedQty] = useState<number | null>(null);
-  const [calculatedMargin, setCalculatedMargin] = useState<number | null>(null);
-  const [calculatedLiquidation, setCalculatedLiquidation] = useState<number | null>(null);
-  const [estimatedPnl, setEstimatedPnl] = useState<number | null>(null);
-  const [direction, setDirection] = useState<"long" | "short" | null>(null);
-  const [liqWarning, setLiqWarning] = useState<{ level: "safe" | "warning" | "danger"; message: string } | null>(null);
-  const [rrRatio, setRrRatio] = useState<number | null>(null);
-  const [slDistance, setSlDistance] = useState<number | null>(null);
-  const [tpDistance, setTpDistance] = useState<number | null>(null);
-  const [minOrderWarning, setMinOrderWarning] = useState<string | null>(null);
-  const [balanceWarning, setBalanceWarning] = useState<{ message: string; suggestedLeverage?: number } | null>(null);
-  const [priceOrderError, setPriceOrderError] = useState<string | null>(null);
+  // Trade execution state & calculated values now come from useTradeStore above
 
   // Constants (Hyperliquid defaults)
   const TAKER_FEE_RATE = 0.00035; // 0.035% taker fee on Hyperliquid
@@ -905,13 +790,59 @@ function App() {
         setWalletAddress(data.walletAddress);
         setApiPrivateKey(data.apiPrivateKey || "");
 
+        // Load exchange type (default to hyperliquid for backwards compatibility)
+        const exchangeType: ExchangeType = data.exchangeType || "hyperliquid";
+        setSelectedExchange(exchangeType);
+
         if (data.apiPrivateKey) {
-          const wallet = new ethers.Wallet(data.apiPrivateKey);
-          setApiWalletAddress(wallet.address);
-          setTradingEnabled(true);
+          // Initialize exchange with credentials
+          try {
+            const exchange = createExchange(exchangeType, false);
+            await exchange.initialize({
+              walletAddress: data.walletAddress,
+              privateKey: data.apiPrivateKey,
+            });
+            exchangeRef.current = exchange;
+
+            // Set API wallet address based on exchange type
+            const isSolana = EXCHANGE_CONFIGS[exchangeType].walletType === "solana";
+            if (!isSolana) {
+              const wallet = new ethers.Wallet(data.apiPrivateKey);
+              setApiWalletAddress(wallet.address);
+            } else {
+              setApiWalletAddress(data.walletAddress);
+            }
+            setTradingEnabled(true);
+
+            log.info("Exchange", `Restored connection to ${exchangeType}`);
+          } catch (e) {
+            log.error("Exchange", "Failed to restore exchange connection", e);
+          }
         }
 
-        await fetchUserState(data.walletAddress);
+        // Fetch initial data using exchange if available
+        if (exchangeRef.current) {
+          try {
+            const [accountData, positionsData, ordersData] = await Promise.all([
+              exchangeRef.current.getAccountInfo(),
+              exchangeRef.current.getPositions(),
+              exchangeRef.current.getOpenOrders(),
+            ]);
+            setAccountInfo(accountData);
+            setPositions(positionsData);
+            setOpenOrders(ordersData);
+          } catch (e) {
+            log.warn("Exchange", "Failed to fetch data on unlock", e);
+            // Fallback to legacy fetch for Hyperliquid
+            if (data.exchangeType !== "drift") {
+              await fetchUserState(data.walletAddress);
+            }
+          }
+        } else {
+          // No exchange initialized, try legacy fetch
+          await fetchUserState(data.walletAddress);
+        }
+
         setAppState("dashboard");
       } else {
         setAppState("setup_keys");
@@ -924,14 +855,42 @@ function App() {
     }
   }, []);
 
-  // Fetch actual position data from Hyperliquid for a specific asset
+  // Fetch actual position data for a specific asset
   // Returns the REAL entry price and size after order fill
+  // Works with any exchange via the exchange interface
   const fetchActualPosition = async (
     address: string,
     asset: string,
-    maxAttempts: number = 10,
+    maxAttempts: number = 5, // Reduced from 10 - limit orders may not fill immediately
     delayMs: number = 500
   ): Promise<{ actualEntry: number; actualSize: number } | null> => {
+    // For Drift and other exchanges, use the exchange's getPositions method
+    if (exchangeRef.current && selectedExchange !== "hyperliquid") {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const positions = await exchangeRef.current.getPositions();
+          const position = positions.find(
+            (p) => p.symbol === asset && parseFloat(p.size) !== 0
+          );
+          if (position) {
+            return {
+              actualEntry: parseFloat(position.entryPrice),
+              actualSize: Math.abs(parseFloat(position.size)),
+            };
+          }
+        } catch (e) {
+          log.warn("Trading", `Attempt ${attempt + 1} to fetch position failed`, e);
+        }
+        if (attempt < maxAttempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+      // For limit orders on Drift, position may not exist yet - this is OK
+      log.info("Trading", "Position not found - order may be pending (limit order)");
+      return null;
+    }
+
+    // For Hyperliquid, use the direct API
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const response = await fetch(HYPERLIQUID_INFO_API, {
@@ -1111,24 +1070,44 @@ function App() {
           return;
         }
 
-        setAppState("biometric_prompt");
-        setBiometricAvailable(true);
-
+        // Check if Touch ID is available
         try {
-          log.info("Auth", "Attempting keychain load for biometric auth");
-          const result = await invoke<KeychainGetResult>("keychain_load");
+          const biometricCheck = await invoke<{ success: boolean; available: boolean; error?: string }>("check_biometric_available");
 
-          if (result.success && result.password) {
-            log.info("Auth", "Keychain load successful, unlocking vault");
-            await unlockWithPassword(result.password);
+          if (biometricCheck.available) {
+            setAppState("biometric_prompt");
+            setBiometricAvailable(true);
+
+            // Try Touch ID authentication
+            log.info("Auth", "Attempting Touch ID authentication");
+            const authResult = await invoke<{ success: boolean; available: boolean; error?: string }>("authenticate_biometric", {
+              reason: "Unlock Hyperliquid Trader"
+            });
+
+            if (authResult.success) {
+              log.info("Auth", "Touch ID successful, loading keychain");
+              const result = await invoke<KeychainGetResult>("keychain_load");
+
+              if (result.success && result.password) {
+                log.info("Auth", "Keychain load successful, unlocking vault");
+                await unlockWithPassword(result.password);
+              } else {
+                log.warn("Auth", "Keychain load failed after Touch ID", { error: result.error });
+                setBiometricFailed(true);
+                setAppState("unlock");
+              }
+            } else {
+              log.warn("Auth", "Touch ID failed", { error: authResult.error });
+              setBiometricFailed(true);
+              setAppState("unlock");
+            }
           } else {
-            log.warn("Auth", "Keychain load failed", { error: result.error });
-            setBiometricFailed(true);
+            // No biometrics available, go straight to password
+            log.info("Auth", "Biometrics not available, using password");
             setAppState("unlock");
           }
         } catch (e) {
-          log.error("Auth", "Biometric auth failed", e);
-          setBiometricFailed(true);
+          log.error("Auth", "Biometric check failed", e);
           setAppState("unlock");
         }
       } catch (e) {
@@ -1190,10 +1169,10 @@ function App() {
     }
   }, []);
 
-  // Sign and place order
+  // Sign and place order (uses exchange abstraction)
   const placeOrder = async (isBuy: boolean, size: string, price: string, isMarket: boolean = false) => {
-    if (!apiPrivateKey || !apiWalletAddress) {
-      setError("API wallet not configured");
+    if (!exchangeRef.current || !tradingEnabled) {
+      setError("Exchange not connected");
       return;
     }
 
@@ -1202,69 +1181,40 @@ function App() {
     setSuccess("");
 
     try {
-      const wallet = new ethers.Wallet(apiPrivateKey);
-      const assetId = assetIds.get(selectedAsset);
-
-      if (assetId === undefined) {
-        throw new Error(`Asset ${selectedAsset} not found`);
-      }
-
-      const timestamp = Date.now();
-      const formattedPrice = formatHyperliquidPrice(price);
-
       log.debug("Trading", "Order details", {
+        exchange: selectedExchange,
         asset: selectedAsset,
-        assetId,
         isBuy,
-        rawPrice: price,
-        formattedPrice,
+        price,
         size,
+        isMarket,
       });
 
-      const orderWire = {
-        a: assetId,
-        b: isBuy,
-        p: formattedPrice,
-        s: size,
-        r: false,
-        t: isMarket
-          ? { limit: { tif: "Ioc" } }
-          : { limit: { tif: "Gtc" } },
-      };
-
-      const action = {
-        type: "order",
-        orders: [orderWire],
-        grouping: "na",
-      };
-
-      // Use phantom agent signing mechanism
-      const hash = actionHash(action, null, timestamp);
-      const phantomAgent = constructPhantomAgent(hash, true);
-
-      const rawSignature = await wallet.signTypedData(PHANTOM_DOMAIN, AGENT_TYPES, phantomAgent);
-
-      // Split signature into r, s, v components for Hyperliquid API
-      const { r, s, v } = ethers.Signature.from(rawSignature);
-      const signature = { r, s, v };
-
-      const response = await fetch(HYPERLIQUID_EXCHANGE_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          nonce: timestamp,
-          signature,
-        }),
+      const result = await exchangeRef.current.placeOrder({
+        asset: selectedAsset,
+        isBuy,
+        size: parseFloat(size),
+        price: parseFloat(price),
+        // Post-only causes failures on Drift when order would fill immediately
+        // Only use post-only for Hyperliquid where it works reliably
+        postOnly: !isMarket && selectedExchange === "hyperliquid",
       });
 
-      const result = await response.json();
-
-      if (result.status === "ok") {
+      if (result.success) {
         setSuccess(`Order placed! ${isBuy ? "LONG" : "SHORT"} ${size} ${selectedAsset} @ $${price}`);
-        await fetchUserState(walletAddress);
+        // Refresh data
+        if (exchangeRef.current) {
+          const [accountData, positionsData, ordersData] = await Promise.all([
+            exchangeRef.current.getAccountInfo(),
+            exchangeRef.current.getPositions(),
+            exchangeRef.current.getOpenOrders(),
+          ]);
+          setAccountInfo(accountData);
+          setPositions(positionsData);
+          setOpenOrders(ordersData);
+        }
       } else {
-        throw new Error(result.response || JSON.stringify(result));
+        throw new Error(result.error || "Order failed");
       }
     } catch (e) {
       log.error("Trading", "Order failed", e);
@@ -1275,77 +1225,71 @@ function App() {
     }
   };
 
-  // Place stop loss
+  // Place stop loss (uses exchange abstraction)
   const placeStopLoss = async (isBuy: boolean, size: string, triggerPrice: string) => {
-    if (!apiPrivateKey || !apiWalletAddress) return;
+    if (!exchangeRef.current || !tradingEnabled) return;
 
     try {
-      const wallet = new ethers.Wallet(apiPrivateKey);
-      const assetId = assetIds.get(selectedAsset);
-      if (assetId === undefined) return;
-
-      const timestamp = Date.now();
-      const formattedTrigger = formatHyperliquidPrice(triggerPrice);
-      const orderWire = {
-        a: assetId,
-        b: !isBuy,
-        p: formattedTrigger,
-        s: size,
-        r: true,
-        t: {
-          trigger: {
-            isMarket: true,
-            triggerPx: formattedTrigger,
-            tpsl: "sl"
-          }
-        },
-      };
-
-      const action = {
-        type: "order",
-        orders: [orderWire],
-        grouping: "na",
-      };
-
-      // Use phantom agent signing mechanism
-      const hash = actionHash(action, null, timestamp);
-      const phantomAgent = constructPhantomAgent(hash, true);
-
-      const rawSignature = await wallet.signTypedData(PHANTOM_DOMAIN, AGENT_TYPES, phantomAgent);
-      const { r, s, v } = ethers.Signature.from(rawSignature);
-      const signature = { r, s, v };
-
-      await fetch(HYPERLIQUID_EXCHANGE_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          nonce: timestamp,
-          signature,
-        }),
-      });
+      // Use exchange-specific stop loss method
+      const exchange = exchangeRef.current as any; // Cast to access placeStopLoss
+      if (typeof exchange.placeStopLoss === "function") {
+        const result = await exchange.placeStopLoss(
+          selectedAsset,
+          isBuy,
+          parseFloat(size),
+          parseFloat(triggerPrice)
+        );
+        if (!result.success) {
+          log.warn("Trading", "Stop loss failed", result.error);
+        }
+      } else {
+        log.warn("Trading", "Exchange does not support stop loss orders");
+      }
     } catch (e) {
       log.error("Trading", "Stop loss failed", e);
     }
   };
 
-  // Initial fetch
+  // Initial fetch - NO MORE POLLING! Prices fetched on-demand only
   useEffect(() => {
     fetchMeta();
+    // Fetch prices once on mount, then only on-demand
     fetchPrices();
-    const interval = setInterval(fetchPrices, 500); // Update every 500ms
-    return () => clearInterval(interval);
   }, [fetchMeta, fetchPrices]);
 
-  // Refresh when on dashboard
+  // Refresh data function - call this on-demand instead of polling
+  const refreshExchangeData = useCallback(async () => {
+    if (!exchangeRef.current) return;
+    try {
+      const [accountData, positionsData, ordersData, pricesData] = await Promise.all([
+        exchangeRef.current.getAccountInfo(),
+        exchangeRef.current.getPositions(),
+        exchangeRef.current.getOpenOrders(),
+        exchangeRef.current.getMarketPrices(),
+      ]);
+      setAccountInfo(accountData);
+      setPositions(positionsData);
+      setOpenOrders(ordersData);
+      const priceMap = new Map<string, string>();
+      for (const [asset, price] of Object.entries(pricesData)) {
+        priceMap.set(asset, price.toString());
+      }
+      setPrices(priceMap);
+    } catch (e) {
+      log.warn("Dashboard", "Failed to refresh data", e);
+      // Fallback to legacy fetch for Hyperliquid
+      if (selectedExchange === "hyperliquid") {
+        fetchUserState(walletAddress);
+        fetchPrices();
+      }
+    }
+  }, [selectedExchange, walletAddress, fetchUserState, fetchPrices]);
+
+  // Initial dashboard data fetch (once, not polling)
   useEffect(() => {
     if (appState !== "dashboard" || !walletAddress) return;
-    const interval = setInterval(() => {
-      fetchUserState(walletAddress);
-      fetchPrices();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [appState, walletAddress, fetchUserState, fetchPrices]);
+    refreshExchangeData();
+  }, [appState, walletAddress, refreshExchangeData]);
 
   // TradingView Bridge listener
   useEffect(() => {
@@ -1371,13 +1315,42 @@ function App() {
       });
 
       // Execute trade from TradingView Bridge extension
+      // Deduplication uses ref to survive React StrictMode double-mount
       unlistenExecute = await listen<TVTradeRequest>("tradingview-execute-trade", (event) => {
+        const now = Date.now();
+
+        // Time-based deduplication: ignore if received within 2 seconds
+        if (now - lastTradeTimestampRef.current < 2000) {
+          console.log("[TVBridge] Ignoring duplicate trade request (within 2s)");
+          return;
+        }
+
+        // Content-based deduplication: ignore if same trade params within 60 seconds
+        // This prevents TradingView extension retries from creating duplicate trades
+        const tradeParams = JSON.stringify({
+          direction: event.payload.direction,
+          entry: event.payload.entry,
+          stopLoss: event.payload.stopLoss,
+          takeProfit: event.payload.takeProfit,
+        });
+        if (tradeParams === lastTradeParamsRef.current && now - lastTradeTimestampRef.current < 60000) {
+          console.log("[TVBridge] Ignoring retry - same trade params within 60s");
+          // Report success to stop extension from retrying
+          invoke("report_trade_result", { success: true, error: null }).catch(() => {});
+          return;
+        }
+
+        lastTradeTimestampRef.current = now;
+        lastTradeParamsRef.current = tradeParams;
+
         console.log("[TVBridge] *** EXECUTE TRADE ***", event.payload);
         log.info("TVBridge", "Execute trade request", event.payload);
 
         // Check if extension is enabled
         if (!settingsRef.current.extensionEnabled) {
           console.log("[TVBridge] Extension disabled - ignoring trade request");
+          // Report back that extension is disabled
+          invoke("report_trade_result", { success: false, error: "Extension disabled in app settings" }).catch(() => {});
           return;
         }
 
@@ -1797,19 +1770,33 @@ function App() {
     setLoading(true);
     setError("");
     setBiometricFailed(false);
+    setAppState("biometric_prompt");
 
     try {
-      const result = await invoke<KeychainGetResult>("keychain_load");
+      // Try Touch ID authentication
+      const authResult = await invoke<{ success: boolean; available: boolean; error?: string }>("authenticate_biometric", {
+        reason: "Unlock Hyperliquid Trader"
+      });
 
-      if (result.success && result.password) {
-        await unlockWithPassword(result.password);
+      if (authResult.success) {
+        const result = await invoke<KeychainGetResult>("keychain_load");
+
+        if (result.success && result.password) {
+          await unlockWithPassword(result.password);
+        } else {
+          setBiometricFailed(true);
+          setAppState("unlock");
+          setError("Touch ID succeeded but keychain access failed. Please enter your password.");
+        }
       } else {
         setBiometricFailed(true);
+        setAppState("unlock");
         setError("Touch ID failed. Please enter your password.");
       }
     } catch (e) {
       log.error("Auth", "Biometric retry failed", e);
       setBiometricFailed(true);
+      setAppState("unlock");
       setError("Touch ID failed. Please enter your password.");
     } finally {
       setLoading(false);
@@ -1818,7 +1805,14 @@ function App() {
 
   // Save wallet keys
   const saveKeys = async () => {
-    if (!walletAddress || !walletAddress.startsWith("0x")) {
+    const isSolana = EXCHANGE_CONFIGS[selectedExchange].walletType === "solana";
+
+    // Validate wallet address format
+    if (!walletAddress) {
+      setError("Please enter a wallet address");
+      return;
+    }
+    if (!isSolana && !walletAddress.startsWith("0x")) {
       setError("Please enter a valid wallet address starting with 0x");
       return;
     }
@@ -1827,25 +1821,59 @@ function App() {
     setError("");
 
     try {
-      await fetchUserState(walletAddress);
+      // Initialize the exchange
+      const exchange = createExchange(selectedExchange, false);
 
       if (apiPrivateKey) {
         try {
-          const wallet = new ethers.Wallet(apiPrivateKey);
-          setApiWalletAddress(wallet.address);
+          // Initialize exchange with credentials
+          await exchange.initialize({
+            walletAddress,
+            privateKey: apiPrivateKey,
+          });
+
+          // For EVM wallets, derive the address
+          if (!isSolana) {
+            const wallet = new ethers.Wallet(apiPrivateKey);
+            setApiWalletAddress(wallet.address);
+          } else {
+            setApiWalletAddress(walletAddress);
+          }
+
+          exchangeRef.current = exchange;
           setTradingEnabled(true);
+
+          log.info("Exchange", `Connected to ${selectedExchange}`, { walletAddress });
         } catch (e) {
-          log.error("Wallet", "Invalid private key format", e);
-          setError("Invalid private key format");
+          log.error("Exchange", "Failed to initialize exchange", e);
+          setError(`Invalid credentials: ${getErrorMessage(e)}`);
           setLoading(false);
           return;
         }
       }
 
+      // Fetch initial data using the exchange
+      if (exchangeRef.current) {
+        try {
+          const [accountData, positionsData, ordersData] = await Promise.all([
+            exchangeRef.current.getAccountInfo(),
+            exchangeRef.current.getPositions(),
+            exchangeRef.current.getOpenOrders(),
+          ]);
+          setAccountInfo(accountData);
+          setPositions(positionsData);
+          setOpenOrders(ordersData);
+        } catch (e) {
+          log.warn("Exchange", "Failed to fetch initial data", e);
+        }
+      }
+
+      // Save to encrypted store
       const store = await load(STORE_PATH);
       const dataToSave = JSON.stringify({
         walletAddress,
         apiPrivateKey,
+        exchangeType: selectedExchange,
       });
       const encrypted = await encryptData(dataToSave, sessionPassword);
 
@@ -2088,7 +2116,7 @@ function App() {
   }, [currentPrice, autoUpdateEntry, appState]);
 
   // Prepare trade for confirmation
-  const prepareTrade = () => {
+  const prepareTrade = async () => {
     if (!calculatedQty || !direction) {
       setError("Please enter valid entry and stop loss prices");
       return;
@@ -2104,6 +2132,9 @@ function App() {
     if (liqWarning?.level === "danger") {
       // Still allow but will require confirmation
     }
+    // Fetch fresh prices before showing confirmation
+    await fetchPrices();
+    await refreshExchangeData();
     // Update entry to current price when modal opens (if enabled)
     if (updateEntryOnConfirm && currentPrice) {
       setEntryPrice(parseFloat(currentPrice).toFixed(2));
@@ -2140,56 +2171,28 @@ function App() {
   };
 
   // Place take profit order
+  // Place take profit (uses exchange abstraction)
   const placeTakeProfit = async (isBuy: boolean, size: string, triggerPrice: string) => {
-    if (!apiPrivateKey || !apiWalletAddress) return;
+    if (!exchangeRef.current || !tradingEnabled) return;
 
     try {
-      const wallet = new ethers.Wallet(apiPrivateKey);
-      const assetId = assetIds.get(selectedAsset);
-      if (assetId === undefined) return;
-
-      const timestamp = Date.now();
-      const formattedTrigger = formatHyperliquidPrice(triggerPrice);
-      const orderWire = {
-        a: assetId,
-        b: !isBuy, // Close position (opposite direction)
-        p: formattedTrigger,
-        s: size,
-        r: true,
-        t: {
-          trigger: {
-            isMarket: false, // Limit order for lower fees (TP doesn't need market urgency)
-            triggerPx: formattedTrigger,
-            tpsl: "tp"
-          }
-        },
-      };
-
-      const action = {
-        type: "order",
-        orders: [orderWire],
-        grouping: "na",
-      };
-
-      // Use phantom agent signing mechanism
-      const hash = actionHash(action, null, timestamp);
-      const phantomAgent = constructPhantomAgent(hash, true);
-
-      const rawSignature = await wallet.signTypedData(PHANTOM_DOMAIN, AGENT_TYPES, phantomAgent);
-      const { r, s, v } = ethers.Signature.from(rawSignature);
-      const signature = { r, s, v };
-
-      await fetch(HYPERLIQUID_EXCHANGE_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          nonce: timestamp,
-          signature,
-        }),
-      });
-
-      log.info("Trading", "Take profit order placed", { triggerPrice });
+      // Use exchange-specific take profit method
+      const exchange = exchangeRef.current as any; // Cast to access placeTakeProfit
+      if (typeof exchange.placeTakeProfit === "function") {
+        const result = await exchange.placeTakeProfit(
+          selectedAsset,
+          isBuy,
+          parseFloat(size),
+          parseFloat(triggerPrice)
+        );
+        if (result.success) {
+          log.info("Trading", "Take profit order placed", { triggerPrice });
+        } else {
+          log.warn("Trading", "Take profit failed", result.error);
+        }
+      } else {
+        log.warn("Trading", "Exchange does not support take profit orders");
+      }
     } catch (e) {
       log.error("Trading", "Take profit failed", e);
     }
@@ -2235,7 +2238,20 @@ function App() {
     setExecutionStatus("Placing entry order...");
 
     try {
+      // Cancel any existing orders for this asset first (prevents order stacking)
+      if (exchangeRef.current && selectedExchange === "drift") {
+        try {
+          setExecutionStatus("Canceling existing orders...");
+          await exchangeRef.current.cancelAllOrders(selectedAsset);
+          log.info("Trading", "Canceled existing orders for", selectedAsset);
+        } catch (cancelError) {
+          log.warn("Trading", "Failed to cancel existing orders (may not exist)", cancelError);
+          // Continue anyway - might not have any orders to cancel
+        }
+      }
+
       // Place entry order
+      setExecutionStatus("Placing entry order...");
       await placeOrder(isBuy, size, price, orderType === "market");
 
       // Place stop loss
@@ -2250,25 +2266,37 @@ function App() {
         await placeTakeProfit(isBuy, size, takeProfit);
       }
 
+      // Report success to extension EARLY (before position verification)
+      // This prevents timeout for slow on-chain transactions like Drift
+      log.info("Trading", "Orders placed successfully, reporting to extension");
+      invoke("report_trade_result", { success: true, error: null }).catch((e) => {
+        log.debug("Trading", "Early success report failed (extension not waiting)", e);
+      });
+
       // Generate timestamp for trade identification
       const sheetsTimestamp = new Date().toISOString();
       const tradeId = Date.now().toString();
 
-      // Fetch REAL position data from Hyperliquid
-      setExecutionStatus("Fetching actual position...");
+      // Fetch REAL position data from exchange
+      setExecutionStatus("Checking position status...");
       const actualPosition = await fetchActualPosition(walletAddress, selectedAsset);
 
-      // Use REAL values from Hyperliquid, or fall back to our estimates
+      // Use REAL values if position found, or fall back to our estimates
       const realEntry = actualPosition?.actualEntry ?? entry;
       const realSize = actualPosition?.actualSize ?? finalQty;
       const realRisk = realSize * Math.abs(realEntry - sl);
 
+      // Determine if order filled or is pending (limit order sitting in orderbook)
+      const orderFilled = actualPosition !== null;
+      const tradeStatus = orderFilled ? "filled" : "pending";
+
       log.info("Trading", "Position data", {
         planned: { entry, qty: finalQty, risk: finalQty * Math.abs(entry - sl) },
-        actual: actualPosition ? { entry: realEntry, qty: realSize, risk: realRisk } : "Not found - using estimates",
+        actual: actualPosition ? { entry: realEntry, qty: realSize, risk: realRisk } : "Not found - limit order pending",
+        status: tradeStatus,
       });
 
-      // Create trade record with REAL values
+      // Create trade record
       const historyItem: TradeHistoryItem = {
         id: tradeId,
         timestamp: Date.now(),
@@ -2280,7 +2308,7 @@ function App() {
         qty: realSize,
         risk: realRisk,
         leverage: parseFloat(leverage),
-        status: "filled",
+        status: tradeStatus as "filled" | "pending",
         sheetsLogged: !!googleSheetsUrl,
         sheetsTimestamp: googleSheetsUrl ? sheetsTimestamp : undefined,
       };
@@ -2346,6 +2374,11 @@ function App() {
 
       setExecutionStatus("Trade placed successfully!");
 
+      // Report success to extension via Tauri
+      invoke("report_trade_result", { success: true, error: null }).catch((e) => {
+        log.debug("Trading", "Failed to report trade result (extension not waiting)", e);
+      });
+
       // Reset auto-update entry for next trade
       setAutoUpdateEntry(true);
     } catch (e) {
@@ -2353,8 +2386,18 @@ function App() {
       const errorMsg = getErrorMessage(e);
       setExecutionStatus(`Error: ${errorMsg}`);
 
-      // Check if this might be an unfilled order scenario
-      if (autoRetryUnfilled && orderType === "limit") {
+      // Report failure to extension via Tauri
+      invoke("report_trade_result", { success: false, error: errorMsg }).catch((err) => {
+        log.debug("Trading", "Failed to report trade result (extension not waiting)", err);
+      });
+
+      // Check if this might be an unfilled order scenario (not a validation error)
+      // Don't show retry modal for validation errors like minimum order size
+      const isValidationError = errorMsg.includes("below minimum") ||
+                                errorMsg.includes("Invalid order") ||
+                                errorMsg.includes("insufficient") ||
+                                errorMsg.includes("not found");
+      if (autoRetryUnfilled && orderType === "limit" && !isValidationError) {
         // Store the unfilled order for retry
         setUnfilledOrder({
           symbol: selectedAsset,
@@ -2379,9 +2422,14 @@ function App() {
     if (pendingExtensionTrade && calculatedQty && entryPrice && direction && !isExecuting) {
       console.log("[TVBridge] Auto-executing pending extension trade");
       setPendingExtensionTrade(false);
-      executeConfirmedTrade();
+      // Fetch fresh prices before executing
+      (async () => {
+        await fetchPrices();
+        await refreshExchangeData();
+        executeConfirmedTrade();
+      })();
     }
-  }, [pendingExtensionTrade, calculatedQty, entryPrice, direction, isExecuting]);
+  }, [pendingExtensionTrade, calculatedQty, entryPrice, direction, isExecuting, fetchPrices, refreshExchangeData]);
 
   // Format number with commas
   const formatNumber = (n: number, decimals: number = 2) => {
@@ -2427,6 +2475,43 @@ function App() {
 
     const header = `=== Positions (${positions.length}) ===\n`;
     await copyToClipboard(header + positionsText);
+  };
+
+  // Close position (market order to close entire position)
+  const handleClosePosition = async (symbol: string) => {
+    if (!exchangeRef.current) {
+      setError("Not connected to exchange");
+      return;
+    }
+
+    // Check if exchange supports closePosition
+    if (!exchangeRef.current.closePosition) {
+      setError("Close position not supported for this exchange");
+      return;
+    }
+
+    try {
+      log.info("Position", "Closing position", { symbol });
+      const result = await exchangeRef.current.closePosition(symbol);
+
+      if (result.success) {
+        log.info("Position", "Position closed successfully", { symbol, txId: result.orderId });
+        // Refresh positions after closing
+        setTimeout(async () => {
+          if (exchangeRef.current) {
+            const newPositions = await exchangeRef.current.getPositions();
+            setPositions(newPositions);
+          }
+        }, 2000);
+      } else {
+        setError(result.error || "Failed to close position");
+        log.error("Position", "Failed to close", { symbol, error: result.error });
+      }
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setError("Close position failed: " + errMsg);
+      log.error("Position", "Close position error", e);
+    }
   };
 
   // Send trade data to Google Sheets webhook
@@ -2697,37 +2782,77 @@ function App() {
 
   // Setup keys screen
   if (appState === "setup_keys") {
+    const exchangeConfig = EXCHANGE_CONFIGS[selectedExchange];
+    const isSolana = exchangeConfig.walletType === "solana";
+
     return (
       <AuthLayout
         title="Connect Wallet"
-        subtitle="Link your Hyperliquid wallet to start trading"
+        subtitle={`Connect to ${exchangeConfig.name} to start trading`}
         heroTitle="Almost there,"
         heroHighlight="connect your wallet."
         heroDescription="Your API wallet can execute trades but never withdraw funds. It's the safest way to trade programmatically."
       >
         <div className="mode-enter">
+          {/* Exchange Selector */}
           <div className="form-group">
-            <label>Ethereum Wallet Address</label>
+            <label>Select Exchange</label>
+            <div className="exchange-selector">
+              <button
+                type="button"
+                className={`exchange-option ${selectedExchange === "drift" ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedExchange("drift");
+                  setWalletAddress("");
+                  setApiPrivateKey("");
+                }}
+              >
+                <span className="exchange-name">Drift</span>
+                <span className="exchange-badge">US + Worldwide</span>
+                <span className="exchange-fee">-0.02% maker rebate</span>
+              </button>
+              <button
+                type="button"
+                className={`exchange-option ${selectedExchange === "hyperliquid" ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedExchange("hyperliquid");
+                  setWalletAddress("");
+                  setApiPrivateKey("");
+                }}
+              >
+                <span className="exchange-name">Hyperliquid</span>
+                <span className="exchange-badge warning">Non-US Only</span>
+                <span className="exchange-fee">0.015% maker fee</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>{isSolana ? "Solana Wallet Address" : "Ethereum Wallet Address"}</label>
             <div className="input-wrapper">
               <input
                 type="text"
                 value={walletAddress}
                 onChange={(e) => setWalletAddress(e.target.value)}
-                placeholder="0x..."
+                placeholder={isSolana ? "Your Solana address..." : "0x..."}
                 style={{ paddingRight: "16px" }}
               />
             </div>
-            <span className="input-hint">Your MetaMask receiving address (same on all EVM networks)</span>
+            <span className="input-hint">
+              {isSolana
+                ? "Your Phantom/Solflare wallet address"
+                : "Your MetaMask receiving address (same on all EVM networks)"}
+            </span>
           </div>
 
           <div className="form-group">
-            <label>API Wallet Private Key</label>
+            <label>{isSolana ? "Solana Private Key" : "API Wallet Private Key"}</label>
             <div className="input-wrapper">
               <input
                 type={showApiKey ? "text" : "password"}
                 value={apiPrivateKey}
                 onChange={(e) => setApiPrivateKey(e.target.value)}
-                placeholder="0x... (optional for view-only)"
+                placeholder={isSolana ? "Base58 private key..." : "0x... (optional for view-only)"}
               />
               <button
                 type="button"
@@ -2738,8 +2863,12 @@ function App() {
                 {showApiKey ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
-            <span className="input-hint">Required for trading. API wallets cannot withdraw.</span>
-            {apiPrivateKey && apiPrivateKey.length >= 64 && (
+            <span className="input-hint">
+              {isSolana
+                ? "Required for trading. Export from Phantom: Settings → Security → Export Private Key"
+                : "Required for trading. API wallets cannot withdraw."}
+            </span>
+            {!isSolana && apiPrivateKey && apiPrivateKey.length >= 64 && (
               <div className="derived-address">
                 <span className="derived-label">Derived address: </span>
                 <code className="derived-value">
@@ -2763,7 +2892,7 @@ function App() {
             className="btn-primary"
             disabled={loading}
           >
-            {loading ? "Connecting..." : "Connect & Start Trading"}
+            {loading ? "Connecting..." : `Connect to ${exchangeConfig.name}`}
           </button>
 
           <button onClick={lockVault} className="btn-text">
@@ -2771,13 +2900,23 @@ function App() {
           </button>
 
           <div className="info-box">
-            <strong>How to get an API wallet</strong>
-            <ul>
-              <li>Go to app.hyperliquid.xyz</li>
-              <li>Click your address → API Wallets</li>
-              <li>Create a new API wallet</li>
-              <li>Copy the private key</li>
-            </ul>
+            <strong>How to get started with {exchangeConfig.name}</strong>
+            {isSolana ? (
+              <ul>
+                <li>Install Phantom wallet extension</li>
+                <li>Create or import a Solana wallet</li>
+                <li>Go to app.drift.trade and connect</li>
+                <li>Deposit USDC to start trading</li>
+                <li>Export private key from Phantom settings</li>
+              </ul>
+            ) : (
+              <ul>
+                <li>Go to app.hyperliquid.xyz</li>
+                <li>Click your address → API Wallets</li>
+                <li>Create a new API wallet</li>
+                <li>Copy the private key</li>
+              </ul>
+            )}
           </div>
         </div>
 
@@ -3167,6 +3306,7 @@ function App() {
               setAutoUpdateEntry(false);
               setEntryPrice(e.target.value);
             }}
+            onFocus={() => fetchPrices()}
             placeholder="Entry price"
           />
         </div>
@@ -3185,6 +3325,7 @@ function App() {
             type="number"
             value={stopLoss}
             onChange={(e) => setStopLoss(e.target.value)}
+            onFocus={() => fetchPrices()}
             placeholder="Stop loss price"
           />
         </div>
@@ -3199,6 +3340,7 @@ function App() {
             type="number"
             value={takeProfit}
             onChange={(e) => setTakeProfit(e.target.value)}
+            onFocus={() => fetchPrices()}
             placeholder="Take profit price"
           />
         </div>
@@ -3348,6 +3490,7 @@ function App() {
         </div>
         <div className="account-actions">
           {tradingEnabled && <span className="trading-badge">Trading Enabled</span>}
+          <button onClick={() => { fetchPrices(); refreshExchangeData(); }} className="refresh-btn" title="Refresh prices and data">↻</button>
           <button onClick={lockVault} className="lock-btn">Lock</button>
         </div>
       </div>
@@ -3404,6 +3547,7 @@ function App() {
                     <th>Entry</th>
                     <th>Liq. Price</th>
                     <th>PnL</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3416,6 +3560,15 @@ function App() {
                       <td>${pos.liquidationPrice}</td>
                       <td className={parseFloat(pos.unrealizedPnl) >= 0 ? "positive" : "negative"}>
                         ${pos.unrealizedPnl}
+                      </td>
+                      <td>
+                        <button
+                          className="close-position-btn"
+                          onClick={() => handleClosePosition(pos.symbol)}
+                          title="Close position at market"
+                        >
+                          Close
+                        </button>
                       </td>
                     </tr>
                   ))}

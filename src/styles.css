@@ -2038,6 +2038,26 @@ td {
   color: var(--success);
 }
 
+.refresh-btn {
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 16px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: var(--bg-3);
+  color: var(--text-primary);
+}
+
+.refresh-btn:active {
+  transform: rotate(180deg);
+}
+
 .lock-btn {
   padding: 8px 16px;
   background: var(--bg-2);
@@ -2241,6 +2261,23 @@ td {
 .data-table td.loss {
   color: var(--error);
   font-weight: 600;
+}
+
+/* Close Position Button */
+.close-position-btn {
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.close-position-btn:hover {
+  background: var(--error);
+  color: white;
 }
 
 /* Modal */
@@ -3162,4 +3199,66 @@ td {
   font-family: monospace;
   font-size: 10px;
   color: var(--text-primary);
+}
+
+/* Exchange Selector */
+.exchange-selector {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.exchange-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 12px;
+  background: var(--bg-2);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.exchange-option:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-3);
+}
+
+.exchange-option.active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.exchange-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.exchange-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.exchange-badge.warning {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fb923c;
+}
+
+.exchange-fee {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.exchange-option.active .exchange-fee {
+  color: var(--text-secondary);
 }

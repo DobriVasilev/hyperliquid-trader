@@ -2,13 +2,142 @@ use serde::{Deserialize, Serialize};
 use std::thread;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
+use reqwest;
 
 #[cfg(target_os = "macos")]
 use security_framework::passwords::{set_generic_password, get_generic_password, delete_generic_password};
 
+
 const SERVICE_NAME: &str = "com.hyperliquid.trader";
 const ACCOUNT_NAME: &str = "vault_password";
 const BRIDGE_PORT: u16 = 3456;
+
+// ============ Biometric Authentication Result ============
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BiometricResult {
+    success: bool,
+    available: bool,
+    error: Option<String>,
+}
+
+// ============ macOS Touch ID Implementation ============
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn check_biometric_available() -> BiometricResult {
+    use std::process::Command;
+
+    // Check if Touch ID is available by querying system_profiler
+    let output = Command::new("bioutil")
+        .args(["-r"])
+        .output();
+
+    let available = match output {
+        Ok(out) => out.status.success(),
+        Err(_) => {
+            // bioutil not available, try alternative check
+            // On Macs with Touch ID, this file exists
+            std::path::Path::new("/usr/lib/pam/pam_tid.so.2").exists()
+        }
+    };
+
+    BiometricResult {
+        success: true,
+        available,
+        error: if available { None } else { Some("Touch ID not available".to_string()) },
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn authenticate_biometric(reason: String) -> BiometricResult {
+    use std::process::Command;
+
+    // First check if Touch ID is available
+    let check = check_biometric_available();
+    if !check.available {
+        return BiometricResult {
+            success: false,
+            available: false,
+            error: Some("Touch ID not available on this device".to_string()),
+        };
+    }
+
+    // Use osascript to trigger Touch ID authentication
+    // This uses the system's built-in Touch ID prompt
+    let script = format!(
+        r#"
+        use framework "LocalAuthentication"
+        set context to current application's LAContext's alloc()'s init()
+        set policy to current application's LAPolicyDeviceOwnerAuthenticationWithBiometrics
+        set canEval to context's canEvaluatePolicy:policy |error|:(missing value)
+        if not canEval then
+            return "unavailable"
+        end if
+        set authResult to context's evaluatePolicy:policy localizedReason:"{}" |error|:(missing value)
+        if authResult then
+            return "success"
+        else
+            return "failed"
+        end if
+        "#,
+        reason.replace("\"", "\\\"")
+    );
+
+    let output = Command::new("osascript")
+        .args(["-l", "AppleScript", "-e", &script])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let result = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if result == "success" {
+                BiometricResult {
+                    success: true,
+                    available: true,
+                    error: None,
+                }
+            } else if result == "unavailable" {
+                BiometricResult {
+                    success: false,
+                    available: false,
+                    error: Some("Touch ID not available".to_string()),
+                }
+            } else {
+                BiometricResult {
+                    success: false,
+                    available: true,
+                    error: Some("Authentication cancelled or failed".to_string()),
+                }
+            }
+        }
+        Err(e) => BiometricResult {
+            success: false,
+            available: true,
+            error: Some(format!("Failed to run authentication: {}", e)),
+        },
+    }
+}
+
+// Non-macOS fallback
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn check_biometric_available() -> BiometricResult {
+    BiometricResult {
+        success: true,
+        available: false,
+        error: Some("Biometrics only available on macOS".to_string()),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn authenticate_biometric(_reason: String) -> BiometricResult {
+    BiometricResult {
+        success: false,
+        available: false,
+        error: Some("Biometrics only available on macOS".to_string()),
+    }
+}
 
 // Cross-platform secure storage path for Windows/Linux
 #[cfg(not(target_os = "macos"))]
@@ -34,6 +163,17 @@ impl Default for BridgeSettings {
         BridgeSettings { risk: 1.0, leverage: 25, asset: "BTC".to_string(), price: 0.0 }
     }
 }
+
+// Trade result from frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeResult {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+// Pending trade result channel
+use std::sync::mpsc::{channel, Sender};
+static TRADE_RESULT_SENDER: std::sync::OnceLock<Mutex<Option<Sender<TradeResult>>>> = std::sync::OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PositionData {
@@ -251,6 +391,93 @@ fn update_bridge_settings(state: tauri::State<Arc<Mutex<BridgeSettings>>>, risk:
     settings.price = price;
 }
 
+/// Report trade result from frontend back to HTTP server
+#[tauri::command]
+fn report_trade_result(success: bool, error: Option<String>) {
+    let result = TradeResult { success, error };
+    if let Some(sender_lock) = TRADE_RESULT_SENDER.get() {
+        if let Ok(guard) = sender_lock.lock() {
+            if let Some(sender) = guard.as_ref() {
+                let _ = sender.send(result);
+            }
+        }
+    }
+}
+
+// ============ HTTP Proxy for CORS bypass ============
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HttpResponse {
+    success: bool,
+    data: Option<String>,
+    error: Option<String>,
+    status: u16,
+}
+
+/// HTTP GET request - bypasses CORS by making request from Rust
+#[tauri::command]
+async fn http_get(url: String) -> HttpResponse {
+    match reqwest::get(&url).await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            match response.text().await {
+                Ok(text) => HttpResponse {
+                    success: status >= 200 && status < 300,
+                    data: Some(text),
+                    error: None,
+                    status,
+                },
+                Err(e) => HttpResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to read response: {}", e)),
+                    status,
+                },
+            }
+        }
+        Err(e) => HttpResponse {
+            success: false,
+            data: None,
+            error: Some(format!("Request failed: {}", e)),
+            status: 0,
+        },
+    }
+}
+
+/// HTTP POST request - bypasses CORS
+#[tauri::command]
+async fn http_post(url: String, body: String) -> HttpResponse {
+    let client = reqwest::Client::new();
+    match client.post(&url)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .send()
+        .await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            match response.text().await {
+                Ok(text) => HttpResponse {
+                    success: status >= 200 && status < 300,
+                    data: Some(text),
+                    error: None,
+                    status,
+                },
+                Err(e) => HttpResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to read response: {}", e)),
+                    status,
+                },
+            }
+        }
+        Err(e) => HttpResponse {
+            success: false,
+            data: None,
+            error: Some(format!("Request failed: {}", e)),
+            status: 0,
+        },
+    }
+}
+
 /// Start the TradingView bridge HTTP server
 fn start_bridge_server(app_handle: tauri::AppHandle, settings: Arc<Mutex<BridgeSettings>>) {
     thread::spawn(move || {
@@ -322,20 +549,57 @@ fn start_bridge_server(app_handle: tauri::AppHandle, settings: Arc<Mutex<BridgeS
                     .with_header(cors_headers[0].clone());
                 let _ = request.respond(response);
             } else if url == "/execute-trade" && request.method() == &tiny_http::Method::Post {
-                // Execute trade from extension
+                // Execute trade from extension - wait for actual result
                 let mut body = String::new();
                 if request.as_reader().read_to_string(&mut body).is_ok() {
                     println!("Received trade request: {}", body);
                     if let Ok(trade_request) = serde_json::from_str::<TradeRequest>(&body) {
                         println!("Executing trade: {:?}", trade_request);
+
+                        // Create channel for this trade result
+                        let (tx, rx) = channel::<TradeResult>();
+
+                        // Store sender for frontend to use
+                        if let Some(sender_lock) = TRADE_RESULT_SENDER.get() {
+                            if let Ok(mut guard) = sender_lock.lock() {
+                                *guard = Some(tx);
+                            }
+                        } else {
+                            let _ = TRADE_RESULT_SENDER.set(Mutex::new(Some(tx)));
+                        }
+
                         // Emit event to frontend to execute the trade
                         match app_handle.emit("tradingview-execute-trade", trade_request) {
                             Ok(_) => {
-                                println!("Trade execution event emitted");
-                                let response = tiny_http::Response::from_string("{\"success\":true}")
-                                    .with_header(cors_headers[0].clone())
-                                    .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
-                                let _ = request.respond(response);
+                                println!("Trade execution event emitted, waiting for result...");
+
+                                // Wait for result with 60 second timeout (Drift on-chain txs can be slow)
+                                use std::time::Duration;
+                                match rx.recv_timeout(Duration::from_secs(60)) {
+                                    Ok(result) => {
+                                        println!("Trade result received: {:?}", result);
+                                        let response_body = if result.success {
+                                            "{\"success\":true}".to_string()
+                                        } else {
+                                            let error = result.error.unwrap_or_else(|| "Trade failed".to_string());
+                                            // Escape quotes in error message for JSON
+                                            let escaped = error.replace("\"", "\\\"");
+                                            format!("{{\"success\":false,\"error\":\"{}\"}}", escaped)
+                                        };
+                                        let response = tiny_http::Response::from_string(response_body)
+                                            .with_header(cors_headers[0].clone())
+                                            .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                                        let _ = request.respond(response);
+                                    }
+                                    Err(_) => {
+                                        println!("Trade result timeout");
+                                        let response = tiny_http::Response::from_string("{\"success\":false,\"error\":\"Trade execution timeout\"}")
+                                            .with_status_code(408)
+                                            .with_header(cors_headers[0].clone())
+                                            .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                                        let _ = request.respond(response);
+                                    }
+                                }
                             }
                             Err(e) => {
                                 println!("Failed to emit trade event: {}", e);
@@ -392,7 +656,12 @@ pub fn run() {
             keychain_load,
             keychain_delete,
             keychain_has_password,
-            update_bridge_settings
+            update_bridge_settings,
+            report_trade_result,
+            check_biometric_available,
+            authenticate_biometric,
+            http_get,
+            http_post
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

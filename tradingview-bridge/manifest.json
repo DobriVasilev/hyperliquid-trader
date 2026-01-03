@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "TradingView Bridge",
-  "version": "1.6.0",
-  "description": "Connects TradingView/Hyperliquid chart position tool to Hyperliquid Trader app",
+  "version": "1.8.0",
+  "description": "Connects TradingView/Hyperliquid/Drift chart position tool to trading app",
   "permissions": [],
-  "host_permissions": ["*://www.tradingview.com/*", "*://tradingview.com/*", "*://app.hyperliquid.xyz/*", "http://localhost:3456/*"],
+  "host_permissions": ["*://www.tradingview.com/*", "*://tradingview.com/*", "*://app.hyperliquid.xyz/*", "*://drift.trade/*", "*://app.drift.trade/*", "http://localhost:3456/*"],
   "content_scripts": [
     {
-      "matches": ["*://www.tradingview.com/*", "*://tradingview.com/*", "*://app.hyperliquid.xyz/*"],
+      "matches": ["*://www.tradingview.com/*", "*://tradingview.com/*", "*://app.hyperliquid.xyz/*", "*://drift.trade/*", "*://app.drift.trade/*"],
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": true
