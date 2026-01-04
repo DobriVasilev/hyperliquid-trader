@@ -84,13 +84,74 @@ jobs:
           args: ${{ matrix.args }}
           includeUpdaterJson: true
 
-  publish-release:
+  sign-and-publish:
     permissions:
       contents: write
     runs-on: ubuntu-latest
     needs: [create-release, build-tauri]
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download and sign macOS aarch64
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          curl -sL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Hyperliquid.Trader_aarch64.app.tar.gz" -o /tmp/aarch64.tar.gz
+          tauri signer sign /tmp/aarch64.tar.gz
+          AARCH64_SIG=$(cat /tmp/aarch64.tar.gz.sig)
+          echo "AARCH64_SIG=$AARCH64_SIG" >> $GITHUB_ENV
+
+      - name: Download and sign macOS x64
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          curl -sL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Hyperliquid.Trader_x64.app.tar.gz" -o /tmp/x64.tar.gz
+          tauri signer sign /tmp/x64.tar.gz
+          X64_SIG=$(cat /tmp/x64.tar.gz.sig)
+          echo "X64_SIG=$X64_SIG" >> $GITHUB_ENV
+
+      - name: Create latest.json
+        run: |
+          cat > /tmp/latest.json << EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "notes": "See release notes on GitHub",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${{ env.AARCH64_SIG }}",
+                "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Hyperliquid.Trader_aarch64.app.tar.gz"
+              },
+              "darwin-x86_64": {
+                "signature": "${{ env.X64_SIG }}",
+                "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Hyperliquid.Trader_x64.app.tar.gz"
+              }
+            }
+          }
+          EOF
+          cat /tmp/latest.json
+
+      - name: Upload latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} /tmp/latest.json --clobber
+
       - name: Publish release
         uses: actions/github-script@v7
         env:
