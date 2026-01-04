@@ -90,6 +90,8 @@ fn authenticate_biometric(reason: String) -> BiometricResult {
     match output {
         Ok(out) => {
             let result = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+
             if result == "success" {
                 BiometricResult {
                     success: true,
@@ -103,10 +105,18 @@ fn authenticate_biometric(reason: String) -> BiometricResult {
                     error: Some("Touch ID not available".to_string()),
                 }
             } else {
+                // Include more debug info
+                let error_msg = if !stderr.is_empty() {
+                    format!("Touch ID failed: {}", stderr)
+                } else if !result.is_empty() {
+                    format!("Touch ID returned: {}", result)
+                } else {
+                    "Touch ID cancelled or failed".to_string()
+                };
                 BiometricResult {
                     success: false,
                     available: true,
-                    error: Some("Authentication cancelled or failed".to_string()),
+                    error: Some(error_msg),
                 }
             }
         }
