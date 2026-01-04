@@ -10,6 +10,8 @@
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
     "fs:default",
+    "updater:default",
+    "process:default",
     {
       "identifier": "fs:allow-exists",
       "allow": [{ "path": "$DOCUMENT/**" }]
