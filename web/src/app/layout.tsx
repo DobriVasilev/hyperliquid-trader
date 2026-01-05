@@ -17,6 +17,18 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Systems Trader - Trading Pattern Validation",
   description: "Collaborative platform for validating and refining trading pattern detection algorithms",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "https://pub-5cc5403568f5455a945da44f4db19f23.r2.dev/systems_trader_logo.png", sizes: "any" },
+    ],
+    apple: "https://pub-5cc5403568f5455a945da44f4db19f23.r2.dev/systems_trader_logo.png",
+  },
+  openGraph: {
+    title: "Systems Trader",
+    description: "Collaborative platform for validating and refining trading pattern detection algorithms",
+    images: ["https://pub-5cc5403568f5455a945da44f4db19f23.r2.dev/systems_trader_logo.png"],
+  },
 };
 
 export default function RootLayout({
