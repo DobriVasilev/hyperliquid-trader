@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateUlid } from "@/lib/ulid";
+import { validate, createSessionSchema } from "@/lib/validation";
 
 // GET /api/sessions - List all sessions for current user
 export async function GET() {
@@ -76,14 +77,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, symbol, timeframe, patternType, candleData } = body;
 
-    if (!symbol || !timeframe || !patternType) {
+    // Validate input with Zod
+    const validation = validate(createSessionSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
+
+    const { name, symbol, timeframe, patternType, candleData } = validation.data;
 
     const patternSession = await prisma.patternSession.create({
       data: {
@@ -92,7 +96,7 @@ export async function POST(request: NextRequest) {
         symbol,
         timeframe,
         patternType,
-        candleData: candleData || {},
+        candleData: candleData ? JSON.parse(JSON.stringify(candleData)) : {},
         createdById: session.user.id,
       },
     });

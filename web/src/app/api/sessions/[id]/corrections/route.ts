@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { generateUlid } from "@/lib/ulid";
 import { broadcastCorrectionCreated, broadcastDetectionUpdated } from "@/lib/realtime";
 import { logCorrectionCreated, logDetectionStatusChanged } from "@/lib/events";
+import { validate, createCorrectionSchema } from "@/lib/validation";
 
 // GET /api/sessions/[id]/corrections - Get all corrections for a session
 export async function GET(
@@ -84,11 +85,20 @@ export async function POST(
 
   try {
     const body = await request.json();
+
+    // Validate input with Zod
+    const validation = validate(createCorrectionSchema, body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      );
+    }
+
     const {
       detectionId,
       correctionType,
       reason,
-      // For move corrections
       originalIndex,
       originalTime,
       originalPrice,
@@ -98,7 +108,7 @@ export async function POST(
       correctedPrice,
       correctedType,
       correctedStructure,
-    } = body;
+    } = validation.data;
 
     // Check access with edit permission
     const patternSession = await prisma.patternSession.findFirst({
@@ -115,22 +125,6 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "Session not found or no permission" },
         { status: 404 }
-      );
-    }
-
-    // Validate correction type
-    if (!["move", "delete", "add", "confirm"].includes(correctionType)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid correction type" },
-        { status: 400 }
-      );
-    }
-
-    // Validate reason
-    if (!reason || reason.trim().length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Reason is required" },
-        { status: 400 }
       );
     }
 

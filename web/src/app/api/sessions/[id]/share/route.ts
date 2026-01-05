@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logSessionShared } from "@/lib/events";
 import { broadcastSessionUpdated } from "@/lib/realtime";
+import { validate, createShareSchema, updatePublicSchema } from "@/lib/validation";
 
 // GET /api/sessions/[id]/share - Get all shares for a session
 export async function GET(
@@ -80,22 +81,17 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { email, permission = "view" } = body;
 
-    if (!email) {
+    // Validate input with Zod
+    const validation = validate(createShareSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: "Email is required" },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
 
-    // Validate permission
-    if (!["view", "comment", "edit", "admin"].includes(permission)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid permission" },
-        { status: 400 }
-      );
-    }
+    const { email, permission } = validation.data;
 
     // Only owner or admin can share
     const patternSession = await prisma.patternSession.findFirst({
@@ -297,14 +293,17 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { isPublic } = body;
 
-    if (typeof isPublic !== "boolean") {
+    // Validate input with Zod
+    const validation = validate(updatePublicSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: "isPublic must be a boolean" },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
+
+    const { isPublic } = validation.data;
 
     // Only owner can change public status
     const patternSession = await prisma.patternSession.findFirst({

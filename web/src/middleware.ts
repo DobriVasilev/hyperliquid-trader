@@ -1,11 +1,15 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
+// Security headers are now in next.config.ts for smaller bundle size
+
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const isAuthPage = req.nextUrl.pathname.startsWith("/auth");
   const isApiRoute = req.nextUrl.pathname.startsWith("/api");
-  const isPublicRoute = req.nextUrl.pathname === "/";
+  const isPublicRoute = req.nextUrl.pathname === "/" ||
+    req.nextUrl.pathname === "/privacy" ||
+    req.nextUrl.pathname === "/terms";
 
   // Allow API routes (they handle their own auth)
   if (isApiRoute) {

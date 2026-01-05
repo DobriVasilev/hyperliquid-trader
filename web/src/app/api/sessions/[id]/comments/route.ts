@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { generateUlid } from "@/lib/ulid";
 import { broadcastCommentCreated, broadcastCommentUpdated, broadcastCommentDeleted } from "@/lib/realtime";
 import { logCommentCreated, logCommentUpdated, logCommentResolved, logCommentDeleted } from "@/lib/events";
+import { validate, createCommentSchema, updateCommentSchema } from "@/lib/validation";
 
 // GET /api/sessions/[id]/comments - Get all comments for a session
 export async function GET(
@@ -105,6 +106,16 @@ export async function POST(
 
   try {
     const body = await request.json();
+
+    // Validate input with Zod
+    const validation = validate(createCommentSchema, body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      );
+    }
+
     const {
       content,
       detectionId,
@@ -113,7 +124,7 @@ export async function POST(
       candleTime,
       canvasX,
       canvasY,
-    } = body;
+    } = validation.data;
 
     // Check access (view permission is enough for comments)
     const patternSession = await prisma.patternSession.findFirst({
@@ -130,14 +141,6 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "Session not found or no permission" },
         { status: 404 }
-      );
-    }
-
-    // Validate content
-    if (!content || content.trim().length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Comment content is required" },
-        { status: 400 }
       );
     }
 
@@ -214,14 +217,17 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { commentId, content, resolved } = body;
 
-    if (!commentId) {
+    // Validate input with Zod
+    const validation = validate(updateCommentSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: "Comment ID is required" },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
+
+    const { commentId, content, resolved } = validation.data;
 
     // Check access and ownership
     const existingComment = await prisma.patternComment.findFirst({

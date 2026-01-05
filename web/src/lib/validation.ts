@@ -18,44 +18,51 @@ export const updateSessionSchema = z.object({
 });
 
 // Detection schemas
-export const createDetectionSchema = z.object({
+export const runDetectionSchema = z.object({
+  action: z.literal("run_detection"),
+});
+
+export const addManualDetectionSchema = z.object({
+  action: z.literal("add_manual"),
   candleIndex: z.number().int().min(0),
-  candleTime: z.string().datetime().or(z.number()),
+  candleTime: z.number().positive(),
   price: z.number().positive(),
   detectionType: z.string().min(1).max(50),
-  structure: z.string().optional(),
-  confidence: z.number().min(0).max(1).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  structure: z.string().max(10).optional(),
 });
 
-export const updateDetectionSchema = z.object({
-  detectionId: z.string().min(1),
-  status: z.enum(["pending", "confirmed", "rejected", "moved"]).optional(),
-  price: z.number().positive().optional(),
-  candleIndex: z.number().int().min(0).optional(),
-  candleTime: z.string().datetime().or(z.number()).optional(),
-});
+export const detectionActionSchema = z.discriminatedUnion("action", [
+  runDetectionSchema,
+  addManualDetectionSchema,
+]);
 
-// Correction schemas
+// Correction schemas - matches actual API usage
 export const createCorrectionSchema = z.object({
-  detectionId: z.string().min(1).optional(),
-  correctionType: z.enum(["move", "add", "remove", "reclassify"]),
-  reason: z.string().min(1).max(500),
-  originalPrice: z.number().positive().optional(),
-  correctedPrice: z.number().positive().optional(),
-  originalCandleIndex: z.number().int().min(0).optional(),
-  correctedCandleIndex: z.number().int().min(0).optional(),
+  detectionId: z.string().min(1).optional().nullable(),
+  correctionType: z.enum(["move", "delete", "add", "confirm"]),
+  reason: z.string().min(1).max(1000),
+  // For move/delete corrections - original values
+  originalIndex: z.number().int().min(0).optional().nullable(),
+  originalTime: z.string().or(z.number()).optional().nullable(),
+  originalPrice: z.number().positive().optional().nullable(),
+  originalType: z.string().max(50).optional().nullable(),
+  // For move/add corrections - corrected values
+  correctedIndex: z.number().int().min(0).optional().nullable(),
+  correctedTime: z.string().or(z.number()).optional().nullable(),
+  correctedPrice: z.number().positive().optional().nullable(),
+  correctedType: z.string().max(50).optional().nullable(),
+  correctedStructure: z.string().max(10).optional().nullable(),
 });
 
 // Comment schemas
 export const createCommentSchema = z.object({
   content: z.string().min(1).max(2000),
-  detectionId: z.string().optional(),
-  correctionId: z.string().optional(),
-  parentId: z.string().optional(),
-  candleTime: z.string().datetime().optional(),
-  canvasX: z.number().optional(),
-  canvasY: z.number().optional(),
+  detectionId: z.string().optional().nullable(),
+  correctionId: z.string().optional().nullable(),
+  parentId: z.string().optional().nullable(),
+  candleTime: z.string().or(z.number()).optional().nullable(),
+  canvasX: z.number().optional().nullable(),
+  canvasY: z.number().optional().nullable(),
 });
 
 export const updateCommentSchema = z.object({
@@ -66,7 +73,7 @@ export const updateCommentSchema = z.object({
 
 // Share schemas
 export const createShareSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().max(255),
   permission: z.enum(["view", "comment", "edit", "admin"]).default("view"),
 });
 
