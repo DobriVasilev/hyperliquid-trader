@@ -79,12 +79,6 @@ export default function NewSessionPage() {
     }
   };
 
-  // TODO: This will be replaced with actual pattern detection API call
-  const runDetection = async () => {
-    console.log("Running pattern detection...");
-    // Placeholder for now
-  };
-
   // Quick start - create session and run detection immediately
   const quickStart = async () => {
     if (candles.length === 0) return;

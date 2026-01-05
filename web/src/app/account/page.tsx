@@ -4,10 +4,86 @@ import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
+import { usePreferences } from "@/hooks/usePreferences";
+
+// Toggle switch component
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`
+        relative w-11 h-6 rounded-full transition-colors
+        ${checked ? "bg-blue-600" : "bg-gray-700"}
+        ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+      `}
+    >
+      <span
+        className={`
+          absolute top-1 w-4 h-4 bg-white rounded-full transition-transform
+          ${checked ? "left-6" : "left-1"}
+        `}
+      />
+    </button>
+  );
+}
+
+// Select component
+function Select({
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className={`
+        px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm
+        focus:outline-none focus:border-blue-500 transition-colors
+        ${disabled ? "opacity-50 cursor-not-allowed" : ""}
+      `}
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function AccountPage() {
   const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "data">("profile");
+  const {
+    preferences,
+    isLoading: prefsLoading,
+    isSaving,
+    error: prefsError,
+    updatePreference,
+    resetPreferences,
+  } = usePreferences();
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [exportStatus, setExportStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
 
   if (status === "loading") {
     return (
@@ -20,6 +96,72 @@ export default function AccountPage() {
   if (status === "unauthenticated") {
     redirect("/auth/login");
   }
+
+  const handleExport = async () => {
+    setExportStatus("loading");
+    try {
+      const response = await fetch("/api/user/export");
+      if (!response.ok) throw new Error("Export failed");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `systems-trader-export-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      setExportStatus("done");
+      setTimeout(() => setExportStatus("idle"), 3000);
+    } catch (err) {
+      console.error("Export error:", err);
+      setExportStatus("error");
+      setTimeout(() => setExportStatus("idle"), 3000);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/user/delete", { method: "DELETE" });
+      if (response.ok) {
+        signOut({ callbackUrl: "/" });
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+    }
+  };
+
+  const symbolOptions = [
+    { value: "BTC", label: "BTC" },
+    { value: "ETH", label: "ETH" },
+    { value: "SOL", label: "SOL" },
+    { value: "DOGE", label: "DOGE" },
+    { value: "XRP", label: "XRP" },
+    { value: "AVAX", label: "AVAX" },
+    { value: "LINK", label: "LINK" },
+  ];
+
+  const timeframeOptions = [
+    { value: "1m", label: "1 minute" },
+    { value: "5m", label: "5 minutes" },
+    { value: "15m", label: "15 minutes" },
+    { value: "30m", label: "30 minutes" },
+    { value: "1h", label: "1 hour" },
+    { value: "4h", label: "4 hours" },
+    { value: "1d", label: "1 day" },
+  ];
+
+  const swingModeOptions = [
+    { value: "wicks", label: "Wicks (High/Low)" },
+    { value: "closes", label: "Candle Closes (Open/Close)" },
+  ];
 
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
@@ -59,9 +201,7 @@ export default function AccountPage() {
             <div>
               <h1 className="text-xl font-bold">{session?.user?.name}</h1>
               <p className="text-gray-400">{session?.user?.email}</p>
-              <p className="text-sm text-gray-500 mt-1">
-                Signed in with Google
-              </p>
+              <p className="text-sm text-gray-500 mt-1">Signed in with Google</p>
             </div>
           </div>
         </div>
@@ -100,6 +240,13 @@ export default function AccountPage() {
           </button>
         </div>
 
+        {/* Error display */}
+        {prefsError && (
+          <div className="mb-4 p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm">
+            {prefsError}
+          </div>
+        )}
+
         {/* Tab Content */}
         {activeTab === "profile" && (
           <div className="bg-gray-900 rounded-lg border border-gray-800">
@@ -111,17 +258,13 @@ export default function AccountPage() {
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">
-                  Name
-                </label>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Name</label>
                 <div className="px-3 py-2 bg-gray-800 rounded-lg text-gray-300">
                   {session?.user?.name || "-"}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">
-                  Email
-                </label>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Email</label>
                 <div className="px-3 py-2 bg-gray-800 rounded-lg text-gray-300">
                   {session?.user?.email || "-"}
                 </div>
@@ -135,84 +278,153 @@ export default function AccountPage() {
 
         {activeTab === "preferences" && (
           <div className="space-y-4">
+            {/* Chart Preferences */}
             <div className="bg-gray-900 rounded-lg border border-gray-800">
               <div className="p-4 border-b border-gray-800">
                 <h2 className="font-semibold">Chart Preferences</h2>
+                <p className="text-sm text-gray-500">Configure your default chart settings</p>
               </div>
-              <div className="p-4 space-y-4">
+              <div className="p-4 space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium">Default Symbol</div>
-                    <div className="text-sm text-gray-500">Symbol to show when creating new sessions</div>
+                    <div className="text-sm text-gray-500">Symbol shown when creating new sessions</div>
                   </div>
-                  <select className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm">
-                    <option value="BTC">BTC</option>
-                    <option value="ETH">ETH</option>
-                    <option value="SOL">SOL</option>
-                  </select>
+                  {prefsLoading ? (
+                    <div className="w-24 h-10 bg-gray-800 rounded-lg animate-pulse" />
+                  ) : (
+                    <Select
+                      value={preferences.defaultSymbol}
+                      onChange={(v) => updatePreference("defaultSymbol", v)}
+                      options={symbolOptions}
+                      disabled={isSaving}
+                    />
+                  )}
                 </div>
+
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium">Default Timeframe</div>
-                    <div className="text-sm text-gray-500">Timeframe to show when creating new sessions</div>
+                    <div className="text-sm text-gray-500">Timeframe shown when creating new sessions</div>
                   </div>
-                  <select className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm">
-                    <option value="1m">1m</option>
-                    <option value="5m">5m</option>
-                    <option value="15m" selected>15m</option>
-                    <option value="1h">1H</option>
-                    <option value="4h">4H</option>
-                    <option value="1d">1D</option>
-                  </select>
+                  {prefsLoading ? (
+                    <div className="w-28 h-10 bg-gray-800 rounded-lg animate-pulse" />
+                  ) : (
+                    <Select
+                      value={preferences.defaultTimeframe}
+                      onChange={(v) => updatePreference("defaultTimeframe", v)}
+                      options={timeframeOptions}
+                      disabled={isSaving}
+                    />
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">Show Volume</div>
+                    <div className="text-sm text-gray-500">Display volume bars on chart</div>
+                  </div>
+                  {prefsLoading ? (
+                    <div className="w-11 h-6 bg-gray-800 rounded-full animate-pulse" />
+                  ) : (
+                    <Toggle
+                      checked={preferences.showVolume}
+                      onChange={(v) => updatePreference("showVolume", v)}
+                      disabled={isSaving}
+                    />
+                  )}
                 </div>
               </div>
             </div>
 
+            {/* Detection Preferences */}
+            <div className="bg-gray-900 rounded-lg border border-gray-800">
+              <div className="p-4 border-b border-gray-800">
+                <h2 className="font-semibold">Detection Preferences</h2>
+                <p className="text-sm text-gray-500">Configure how patterns are detected</p>
+              </div>
+              <div className="p-4 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">Swing Detection Mode</div>
+                    <div className="text-sm text-gray-500">
+                      <span className="text-blue-400">Wicks</span>: Uses candle high/low for swing points
+                      <br />
+                      <span className="text-purple-400">Closes</span>: Uses candle open/close for swing points
+                    </div>
+                  </div>
+                  {prefsLoading ? (
+                    <div className="w-44 h-10 bg-gray-800 rounded-lg animate-pulse" />
+                  ) : (
+                    <Select
+                      value={preferences.swingDetectionMode}
+                      onChange={(v) => updatePreference("swingDetectionMode", v as "wicks" | "closes")}
+                      options={swingModeOptions}
+                      disabled={isSaving}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Notification Preferences */}
             <div className="bg-gray-900 rounded-lg border border-gray-800">
               <div className="p-4 border-b border-gray-800">
                 <h2 className="font-semibold">Notification Preferences</h2>
               </div>
-              <div className="p-4 space-y-4">
+              <div className="p-4 space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium">Email Notifications</div>
                     <div className="text-sm text-gray-500">Receive email updates about your sessions</div>
                   </div>
-                  <button
-                    className="relative w-11 h-6 bg-gray-700 rounded-full transition-colors"
-                    aria-pressed="false"
-                  >
-                    <span className="absolute left-1 top-1 w-4 h-4 bg-gray-400 rounded-full transition-transform" />
-                  </button>
+                  {prefsLoading ? (
+                    <div className="w-11 h-6 bg-gray-800 rounded-full animate-pulse" />
+                  ) : (
+                    <Toggle
+                      checked={preferences.emailNotifications}
+                      onChange={(v) => updatePreference("emailNotifications", v)}
+                      disabled={isSaving}
+                    />
+                  )}
                 </div>
+
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium">Session Collaboration Alerts</div>
+                    <div className="font-medium">Collaboration Alerts</div>
                     <div className="text-sm text-gray-500">Get notified when someone joins your session</div>
                   </div>
-                  <button
-                    className="relative w-11 h-6 bg-blue-600 rounded-full transition-colors"
-                    aria-pressed="true"
-                  >
-                    <span className="absolute left-6 top-1 w-4 h-4 bg-white rounded-full transition-transform" />
-                  </button>
+                  {prefsLoading ? (
+                    <div className="w-11 h-6 bg-gray-800 rounded-full animate-pulse" />
+                  ) : (
+                    <Toggle
+                      checked={preferences.collaborationAlerts}
+                      onChange={(v) => updatePreference("collaborationAlerts", v)}
+                      disabled={isSaving}
+                    />
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4">
-              <div className="flex gap-3">
-                <svg className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <div>
-                  <div className="font-medium text-yellow-200">Preferences Coming Soon</div>
-                  <div className="text-sm text-yellow-300/70 mt-1">
-                    Preference saving is not yet implemented. These settings are for demonstration purposes.
-                  </div>
-                </div>
-              </div>
+            {/* Reset Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={resetPreferences}
+                disabled={isSaving || prefsLoading}
+                className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                Reset to Defaults
+              </button>
             </div>
+
+            {/* Saving indicator */}
+            {isSaving && (
+              <div className="fixed bottom-4 right-4 px-4 py-2 bg-blue-600 text-white rounded-lg shadow-lg flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </div>
+            )}
           </div>
         )}
 
@@ -228,10 +440,27 @@ export default function AccountPage() {
                     <div className="font-medium">Export Your Data</div>
                     <div className="text-sm text-gray-500">Download all your sessions and corrections</div>
                   </div>
-                  <button className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors">
-                    Export
+                  <button
+                    onClick={handleExport}
+                    disabled={exportStatus === "loading"}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                      exportStatus === "done"
+                        ? "bg-green-600 text-white"
+                        : exportStatus === "error"
+                        ? "bg-red-600 text-white"
+                        : "bg-gray-800 hover:bg-gray-700 text-white"
+                    }`}
+                  >
+                    {exportStatus === "loading" && (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
+                    {exportStatus === "done" && "Downloaded!"}
+                    {exportStatus === "error" && "Error"}
+                    {exportStatus === "idle" && "Export"}
+                    {exportStatus === "loading" && "Exporting..."}
                   </button>
                 </div>
+
                 <div className="border-t border-gray-800 pt-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -240,10 +469,22 @@ export default function AccountPage() {
                         Permanently delete your account and all associated data
                       </div>
                     </div>
-                    <button className="px-4 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-sm font-medium transition-colors">
-                      Delete
+                    <button
+                      onClick={handleDelete}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        deleteConfirm
+                          ? "bg-red-600 text-white"
+                          : "bg-red-600/20 text-red-400 hover:bg-red-600/30"
+                      }`}
+                    >
+                      {deleteConfirm ? "Click Again to Confirm" : "Delete"}
                     </button>
                   </div>
+                  {deleteConfirm && (
+                    <p className="mt-2 text-sm text-red-400">
+                      This action cannot be undone. Click the button again to permanently delete your account.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

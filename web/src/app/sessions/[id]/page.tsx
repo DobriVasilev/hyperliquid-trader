@@ -7,6 +7,7 @@ import { useSession, PatternDetection } from "@/hooks/useSession";
 import { useCandles } from "@/hooks/useCandles";
 import { useRealtime } from "@/hooks/useRealtime";
 import { CandlestickChart, ChartCandle, ChartMarker } from "@/components/chart/CandlestickChart";
+import { ChartToolbar, ChartTool } from "@/components/chart/ChartToolbar";
 import { CorrectionModal, CorrectionData } from "@/components/corrections";
 import { CommentInput, CommentThread } from "@/components/comments";
 import { OnlineUsers, CursorOverlay } from "@/components/realtime";
@@ -70,27 +71,44 @@ export default function SessionDetailPage({
   const [selectedDetection, setSelectedDetection] = useState<PatternDetection | null>(null);
   const [addData, setAddData] = useState<{ time: number; price: number; candleIndex: number } | null>(null);
 
-  // Add mode toggle - must be enabled to click-to-add detections
-  const [isAddMode, setIsAddMode] = useState(false);
+  // Chart tool state - like TradingView drawing tools
+  const [activeTool, setActiveTool] = useState<ChartTool>("select");
 
-  // Keyboard shortcut for Add Mode (press 'A' to toggle)
+  // Keyboard shortcuts for tools
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      if (e.key === "a" || e.key === "A") {
-        setIsAddMode((prev) => !prev);
-      }
-      // Escape to turn off add mode
-      if (e.key === "Escape" && isAddMode) {
-        setIsAddMode(false);
+      const key = e.key.toUpperCase();
+      switch (key) {
+        case "V":
+          setActiveTool("select");
+          break;
+        case "H":
+          setActiveTool("swing_high");
+          break;
+        case "L":
+          setActiveTool("swing_low");
+          break;
+        case "B":
+          setActiveTool("bos_bullish");
+          break;
+        case "N":
+          setActiveTool("bos_bearish");
+          break;
+        case "M":
+          setActiveTool("msb_bullish");
+          break;
+        case "ESCAPE":
+          setActiveTool("select");
+          break;
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isAddMode]);
+  }, []);
 
   // Fetch fresh candles if session doesn't have them stored
   const { candles: fetchedCandles, isLoading: candlesLoading } = useCandles({
@@ -168,13 +186,17 @@ export default function SessionDetailPage({
     }
   };
 
+  // State for auto-setting detection type from toolbar
+  const [autoDetectionType, setAutoDetectionType] = useState<string | null>(null);
+
   const handleCandleClick = (candle: ChartCandle, index: number) => {
-    // Only open add modal if Add Mode is enabled
-    if (!isAddMode) return;
+    // Only trigger if a drawing tool is selected (not "select" mode)
+    if (activeTool === "select") return;
 
     // Use snapped price if available (from click detection), otherwise fall back to close
     const snappedPrice = (candle as { _snappedPrice?: number })._snappedPrice ?? candle.close;
     setAddData({ time: candle.time, price: snappedPrice, candleIndex: index });
+    setAutoDetectionType(activeTool); // Pass the tool type to the modal
     setCorrectionMode("add");
     setSelectedDetection(null);
     setCorrectionModalOpen(true);
@@ -186,6 +208,7 @@ export default function SessionDetailPage({
     if (detection) {
       setSelectedDetection(detection);
       setAddData(null);
+      setAutoDetectionType(null);
       // Default to showing options - user can choose action
       setCorrectionMode("delete"); // Will show detection info, user picks action
       setCorrectionModalOpen(true);
@@ -193,13 +216,14 @@ export default function SessionDetailPage({
   };
 
   const handleChartClick = (time: number, price: number) => {
-    // Only open add modal if Add Mode is enabled
-    if (!isAddMode) return;
+    // Only trigger if a drawing tool is selected (not "select" mode)
+    if (activeTool === "select") return;
 
     // Find the candle index for this time
     const candleIndex = candles.findIndex((c) => c.time === time);
     if (candleIndex !== -1) {
       setAddData({ time, price, candleIndex });
+      setAutoDetectionType(activeTool); // Pass the tool type to the modal
       setCorrectionMode("add");
       setSelectedDetection(null);
       setCorrectionModalOpen(true);
@@ -490,6 +514,12 @@ export default function SessionDetailPage({
               className="bg-gray-900 rounded-lg overflow-hidden relative"
               onMouseMove={handleMouseMove}
             >
+              {/* TradingView-style toolbar */}
+              <ChartToolbar
+                activeTool={activeTool}
+                onToolChange={setActiveTool}
+                disabled={isLoading}
+              />
               <CandlestickChart
                 candles={candles}
                 markers={markers}
@@ -521,24 +551,8 @@ export default function SessionDetailPage({
               <div className="w-3 h-3 rounded-full bg-purple-500" />
               <span>MSB</span>
             </div>
-            <div className="ml-auto flex items-center gap-4">
-              <span className="text-gray-500 text-sm">Click markers to edit</span>
-              <button
-                onClick={() => setIsAddMode(!isAddMode)}
-                className={`
-                  flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                  ${isAddMode
-                    ? "bg-green-600 text-white shadow-lg shadow-green-600/30"
-                    : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
-                  }
-                `}
-                title="Toggle Add Mode (A)"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                {isAddMode ? "Adding Mode ON" : "Add Detection"}
-              </button>
+            <div className="ml-auto text-gray-500 text-sm">
+              Click markers to edit • Use toolbar or keyboard shortcuts to add
             </div>
           </div>
         </div>
@@ -758,11 +772,15 @@ export default function SessionDetailPage({
       {/* Correction Modal */}
       <CorrectionModal
         isOpen={correctionModalOpen}
-        onClose={() => setCorrectionModalOpen(false)}
+        onClose={() => {
+          setCorrectionModalOpen(false);
+          setActiveTool("select"); // Reset tool after modal closes
+        }}
         onSubmit={handleCorrectionSubmit}
         detection={selectedDetection}
         mode={correctionMode}
         addData={addData || undefined}
+        autoDetectionType={autoDetectionType}
       />
     </main>
   );

@@ -22,6 +22,10 @@ model User {
   image         String?
   password      String?   @db.Text // For credentials provider
 
+  // User preferences (stored as JSON)
+  // {defaultSymbol, defaultTimeframe, swingDetectionMode, emailNotifications, collaborationAlerts}
+  preferences   Json?
+
   // Relations
   accounts      Account[]
   sessions      Session[]

@@ -15,6 +15,8 @@ interface CorrectionModalProps {
     price: number;
     candleIndex: number;
   };
+  // Auto-set detection type from toolbar tool
+  autoDetectionType?: string | null;
 }
 
 export interface CorrectionData {
@@ -55,6 +57,7 @@ export function CorrectionModal({
   detection,
   mode,
   addData,
+  autoDetectionType,
 }: CorrectionModalProps) {
   const [reason, setReason] = useState("");
   const [detectionType, setDetectionType] = useState("swing_low");
@@ -65,10 +68,15 @@ export function CorrectionModal({
   useEffect(() => {
     if (isOpen) {
       setReason("");
-      setDetectionType(detection?.detectionType || "swing_low");
+      // Use autoDetectionType from toolbar if available, otherwise fall back to detection type
+      if (autoDetectionType && mode === "add") {
+        setDetectionType(autoDetectionType);
+      } else {
+        setDetectionType(detection?.detectionType || "swing_low");
+      }
       setStructure(detection?.structure || "");
     }
-  }, [isOpen, detection]);
+  }, [isOpen, detection, autoDetectionType, mode]);
 
   if (!isOpen) return null;
 

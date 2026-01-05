@@ -106,6 +106,17 @@ export async function POST(
         );
       }
 
+      // Fetch user preferences for detection settings
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { preferences: true },
+      });
+
+      const userPrefs = user?.preferences as { swingDetectionMode?: "wicks" | "closes" } | null;
+      const detectionOptions: DetectionOptions = {
+        mode: userPrefs?.swingDetectionMode || "wicks",
+      };
+
       // Clear existing detections for this session
       await prisma.patternDetection.deleteMany({
         where: { sessionId: id },
@@ -124,16 +135,16 @@ export async function POST(
 
       switch (patternSession.patternType) {
         case "swings":
-          detections = detectSwings(candles);
+          detections = detectSwings(candles, detectionOptions);
           break;
         case "bos":
-          detections = detectBOS(candles);
+          detections = detectBOS(candles, detectionOptions);
           break;
         case "msb":
-          detections = detectMSB(candles);
+          detections = detectMSB(candles, detectionOptions);
           break;
         default:
-          detections = detectSwings(candles); // Default to swings
+          detections = detectSwings(candles, detectionOptions); // Default to swings
       }
 
       // Store detections in database
@@ -248,17 +259,33 @@ interface Detection {
   metadata?: Record<string, unknown>;
 }
 
+// Detection mode: "wicks" uses high/low, "closes" uses close price only
+type SwingDetectionMode = "wicks" | "closes";
+
+interface DetectionOptions {
+  mode: SwingDetectionMode;
+}
+
 /**
  * Detect swing highs and lows using break-confirmation logic
  * A swing is only confirmed when something BREAKS it:
  * - Swing LOW confirmed when price breaks ABOVE previous swing high
  * - Swing HIGH confirmed when price breaks BELOW previous swing low
+ *
+ * @param candles - Array of candle data
+ * @param options - Detection options (mode: "wicks" uses high/low, "closes" uses close only)
  */
-function detectSwings(candles: Candle[]): Detection[] {
+function detectSwings(candles: Candle[], options: DetectionOptions = { mode: "wicks" }): Detection[] {
   if (candles.length < 5) return [];
 
   const detections: Detection[] = [];
   const lookback = 3; // Number of candles to look back/forward for pivot
+  const useWicks = options.mode === "wicks";
+
+  // Helper to get the "high" price based on mode
+  const getHigh = (c: Candle) => useWicks ? c.high : c.close;
+  // Helper to get the "low" price based on mode
+  const getLow = (c: Candle) => useWicks ? c.low : c.close;
 
   // Find potential pivots first
   const pivots: Array<{
@@ -270,29 +297,31 @@ function detectSwings(candles: Candle[]): Detection[] {
 
   for (let i = lookback; i < candles.length - lookback; i++) {
     const current = candles[i];
+    const currentHigh = getHigh(current);
+    const currentLow = getLow(current);
 
     // Check for swing high
     let isSwingHigh = true;
     for (let j = 1; j <= lookback; j++) {
-      if (candles[i - j].high >= current.high || candles[i + j].high >= current.high) {
+      if (getHigh(candles[i - j]) >= currentHigh || getHigh(candles[i + j]) >= currentHigh) {
         isSwingHigh = false;
         break;
       }
     }
     if (isSwingHigh) {
-      pivots.push({ index: i, type: "high", price: current.high, time: current.time });
+      pivots.push({ index: i, type: "high", price: currentHigh, time: current.time });
     }
 
     // Check for swing low
     let isSwingLow = true;
     for (let j = 1; j <= lookback; j++) {
-      if (candles[i - j].low <= current.low || candles[i + j].low <= current.low) {
+      if (getLow(candles[i - j]) <= currentLow || getLow(candles[i + j]) <= currentLow) {
         isSwingLow = false;
         break;
       }
     }
     if (isSwingLow) {
-      pivots.push({ index: i, type: "low", price: current.low, time: current.time });
+      pivots.push({ index: i, type: "low", price: currentLow, time: current.time });
     }
   }
 
@@ -378,8 +407,8 @@ function detectSwings(candles: Candle[]): Detection[] {
  * Detect Break of Structure (BOS)
  * BOS occurs when price breaks a significant swing level in the direction of the trend
  */
-function detectBOS(candles: Candle[]): Detection[] {
-  const swings = detectSwings(candles);
+function detectBOS(candles: Candle[], options: DetectionOptions = { mode: "wicks" }): Detection[] {
+  const swings = detectSwings(candles, options);
   const detections: Detection[] = [];
 
   for (let i = 1; i < swings.length; i++) {
@@ -418,8 +447,8 @@ function detectBOS(candles: Candle[]): Detection[] {
  * Detect Market Structure Break (MSB)
  * MSB occurs when price breaks a swing level against the current trend
  */
-function detectMSB(candles: Candle[]): Detection[] {
-  const swings = detectSwings(candles);
+function detectMSB(candles: Candle[], options: DetectionOptions = { mode: "wicks" }): Detection[] {
+  const swings = detectSwings(candles, options);
   const detections: Detection[] = [];
 
   for (let i = 1; i < swings.length; i++) {
