@@ -4,209 +4,247 @@ import { useState } from "react";
 
 const logos = [
   {
-    id: "geometric-lines",
-    name: "Geometric Lines",
-    description: "Clean geometric lines forming an abstract chart pattern",
+    id: "hexagon-core",
+    name: "Hexagon Core",
+    description: "Clean hexagonal mark with inner core - like the login page",
     svg: (
       <svg viewBox="0 0 64 64" className="w-full h-full">
         <defs>
-          <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" />
-            <stop offset="100%" stopColor="#8b5cf6" />
+          <linearGradient id="hex-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#60A5FA" />
+          </linearGradient>
+        </defs>
+        <path d="M32 4L56 16V48L32 60L8 48V16L32 4Z" fill="url(#hex-grad)" />
+        <path d="M32 16L44 23V37L32 44L20 37V23L32 16Z" fill="#0a0a0f" fillOpacity="0.5" />
+      </svg>
+    ),
+  },
+  {
+    id: "st-monogram",
+    name: "ST Monogram",
+    description: "Geometric S+T letterform, minimal and bold",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="st-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1D4ED8" />
           </linearGradient>
         </defs>
         <path
-          d="M8 48 L20 32 L28 40 L40 24 L52 36 L56 28"
+          d="M16 12H48V20H36V52H28V20H16V12Z"
+          fill="url(#st-grad)"
+        />
+        <path
+          d="M16 28H28V36H20C18 36 16 38 16 40V44C16 46 18 48 20 48H48V40H28V36H44C46 36 48 34 48 32V28C48 26 46 24 44 24H16V28Z"
+          fill="url(#st-grad)"
+          fillOpacity="0.6"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "delta-rise",
+    name: "Delta Rise",
+    description: "Upward triangle representing growth and precision",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="delta-grad" x1="32" y1="8" x2="32" y2="56" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1E40AF" />
+          </linearGradient>
+        </defs>
+        <path d="M32 8L56 56H8L32 8Z" fill="url(#delta-grad)" />
+        <path d="M32 24L44 48H20L32 24Z" fill="#0a0a0f" fillOpacity="0.3" />
+      </svg>
+    ),
+  },
+  {
+    id: "bars-minimal",
+    name: "Bars Minimal",
+    description: "Three ascending bars - ultra-clean like Binance",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="bars-grad" x1="0" y1="56" x2="0" y2="8" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#1E40AF" />
+            <stop offset="1" stopColor="#3B82F6" />
+          </linearGradient>
+        </defs>
+        <rect x="8" y="36" width="12" height="20" rx="2" fill="url(#bars-grad)" />
+        <rect x="26" y="24" width="12" height="32" rx="2" fill="url(#bars-grad)" />
+        <rect x="44" y="8" width="12" height="48" rx="2" fill="url(#bars-grad)" />
+      </svg>
+    ),
+  },
+  {
+    id: "circle-s",
+    name: "Circle S",
+    description: "Circular mark with stylized S cutout - like Coinbase",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="circle-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#2563EB" />
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="28" fill="url(#circle-grad)" />
+        <path
+          d="M40 20H24C21 20 18 23 18 26C18 29 21 32 24 32H40C43 32 46 35 46 38C46 41 43 44 40 44H24"
           fill="none"
-          stroke="url(#grad1)"
-          strokeWidth="3"
+          stroke="#fff"
+          strokeWidth="5"
           strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "prism-cube",
+    name: "Prism Cube",
+    description: "3D perspective cube mark - modern and technical",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="cube-top" x1="0" y1="0" x2="0" y2="1">
+            <stop stopColor="#60A5FA" />
+            <stop offset="1" stopColor="#3B82F6" />
+          </linearGradient>
+          <linearGradient id="cube-left" x1="0" y1="0" x2="1" y2="1">
+            <stop stopColor="#2563EB" />
+            <stop offset="1" stopColor="#1E40AF" />
+          </linearGradient>
+          <linearGradient id="cube-right" x1="1" y1="0" x2="0" y2="1">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1D4ED8" />
+          </linearGradient>
+        </defs>
+        <path d="M32 6L56 20V44L32 30V6Z" fill="url(#cube-right)" />
+        <path d="M32 6L8 20V44L32 30V6Z" fill="url(#cube-left)" />
+        <path d="M8 44L32 58L56 44L32 30L8 44Z" fill="url(#cube-top)" />
+      </svg>
+    ),
+  },
+  {
+    id: "arrow-bold",
+    name: "Arrow Bold",
+    description: "Bold upward arrow - represents momentum and direction",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="arrow-grad" x1="32" y1="4" x2="32" y2="60" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1E40AF" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M32 4L52 28H40V60H24V28H12L32 4Z"
+          fill="url(#arrow-grad)"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "diamond-solid",
+    name: "Diamond Solid",
+    description: "Solid diamond mark - simple and iconic",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="diamond-grad" x1="32" y1="4" x2="32" y2="60" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#60A5FA" />
+            <stop offset="0.5" stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1E40AF" />
+          </linearGradient>
+        </defs>
+        <path d="M32 4L60 32L32 60L4 32L32 4Z" fill="url(#diamond-grad)" />
+      </svg>
+    ),
+  },
+  {
+    id: "wave-flow",
+    name: "Wave Flow",
+    description: "Flowing S-curve like Solana - represents movement",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="wave-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#60A5FA" />
+            <stop offset="1" stopColor="#2563EB" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M8 16H40C48 16 56 24 56 32C56 40 48 48 40 48H24C16 48 8 40 8 32V16Z"
+          fill="url(#wave-grad)"
+        />
+        <path
+          d="M56 48H24C16 48 8 40 8 32C8 24 16 16 24 16H40C48 16 56 24 56 32V48Z"
+          fill="url(#wave-grad)"
+          fillOpacity="0.4"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: "hex-outline",
+    name: "Hex Outline",
+    description: "Outlined hexagon with bold stroke - clean and modern",
+    svg: (
+      <svg viewBox="0 0 64 64" className="w-full h-full">
+        <defs>
+          <linearGradient id="hex-outline-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1E40AF" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M32 6L54 18V46L32 58L10 46V18L32 6Z"
+          fill="none"
+          stroke="url(#hex-outline-grad)"
+          strokeWidth="5"
           strokeLinejoin="round"
         />
-        <circle cx="20" cy="32" r="3" fill="#3b82f6" />
-        <circle cx="40" cy="24" r="3" fill="#8b5cf6" />
-        <circle cx="56" cy="28" r="3" fill="#a855f7" />
       </svg>
     ),
   },
   {
-    id: "hexagon-pulse",
-    name: "Hexagon Pulse",
-    description: "Hexagonal shape with ascending bars inside",
+    id: "stack-layers",
+    name: "Stack Layers",
+    description: "Layered squares representing data layers",
     svg: (
       <svg viewBox="0 0 64 64" className="w-full h-full">
         <defs>
-          <linearGradient id="grad2" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#06b6d4" />
-            <stop offset="100%" stopColor="#3b82f6" />
+          <linearGradient id="stack-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1E40AF" />
           </linearGradient>
         </defs>
-        <polygon
-          points="32,4 58,18 58,46 32,60 6,46 6,18"
-          fill="none"
-          stroke="url(#grad2)"
-          strokeWidth="2.5"
-        />
-        <rect x="16" y="38" width="6" height="14" fill="#06b6d4" rx="1" />
-        <rect x="25" y="30" width="6" height="22" fill="#3b82f6" rx="1" />
-        <rect x="34" y="22" width="6" height="30" fill="#6366f1" rx="1" />
-        <rect x="43" y="18" width="6" height="34" fill="#8b5cf6" rx="1" />
+        <rect x="4" y="28" width="28" height="28" rx="4" fill="url(#stack-grad)" fillOpacity="0.4" />
+        <rect x="18" y="18" width="28" height="28" rx="4" fill="url(#stack-grad)" fillOpacity="0.7" />
+        <rect x="32" y="8" width="28" height="28" rx="4" fill="url(#stack-grad)" />
       </svg>
     ),
   },
   {
-    id: "wave-pulse",
-    name: "Wave Pulse",
-    description: "Dynamic wave representing market momentum",
+    id: "ring-mark",
+    name: "Ring Mark",
+    description: "Bold ring with gap - represents cycles and systems",
     svg: (
       <svg viewBox="0 0 64 64" className="w-full h-full">
         <defs>
-          <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="50%" stopColor="#3b82f6" />
-            <stop offset="100%" stopColor="#8b5cf6" />
+          <linearGradient id="ring-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#60A5FA" />
+            <stop offset="1" stopColor="#2563EB" />
           </linearGradient>
         </defs>
         <path
-          d="M4 40 Q16 20 24 32 T40 28 T56 24 L60 20"
-          fill="none"
-          stroke="url(#grad3)"
-          strokeWidth="3"
-          strokeLinecap="round"
+          d="M32 4C16.536 4 4 16.536 4 32C4 47.464 16.536 60 32 60C47.464 60 60 47.464 60 32C60 16.536 47.464 4 32 4ZM32 16C40.837 16 48 23.163 48 32C48 40.837 40.837 48 32 48C23.163 48 16 40.837 16 32C16 23.163 23.163 16 32 16Z"
+          fill="url(#ring-grad)"
         />
-        <path
-          d="M4 48 Q16 32 24 40 T40 36 T56 32 L60 28"
-          fill="none"
-          stroke="url(#grad3)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          opacity="0.5"
-        />
-        <circle cx="60" cy="20" r="4" fill="#8b5cf6" />
-      </svg>
-    ),
-  },
-  {
-    id: "diamond-chart",
-    name: "Diamond Chart",
-    description: "Diamond with integrated candlestick pattern",
-    svg: (
-      <svg viewBox="0 0 64 64" className="w-full h-full">
-        <defs>
-          <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#ef4444" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M32 4 L58 32 L32 60 L6 32 Z"
-          fill="none"
-          stroke="url(#grad4)"
-          strokeWidth="2.5"
-        />
-        <line x1="18" y1="42" x2="18" y2="24" stroke="#10b981" strokeWidth="2" />
-        <rect x="15" y="28" width="6" height="10" fill="#10b981" />
-        <line x1="32" y1="48" x2="32" y2="18" stroke="#ef4444" strokeWidth="2" />
-        <rect x="29" y="22" width="6" height="16" fill="#ef4444" />
-        <line x1="46" y1="40" x2="46" y2="26" stroke="#10b981" strokeWidth="2" />
-        <rect x="43" y="30" width="6" height="6" fill="#10b981" />
-      </svg>
-    ),
-  },
-  {
-    id: "minimal-s",
-    name: "Minimal S",
-    description: "Stylized S lettermark with gradient",
-    svg: (
-      <svg viewBox="0 0 64 64" className="w-full h-full">
-        <defs>
-          <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#a855f7" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M44 16 C44 16 48 16 48 22 C48 28 32 28 32 32 C32 36 48 36 48 42 C48 48 44 48 44 48 L20 48 C20 48 16 48 16 42 C16 36 32 36 32 32 C32 28 16 28 16 22 C16 16 20 16 20 16 L44 16 Z"
-          fill="none"
-          stroke="url(#grad5)"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    id: "pulse-circle",
-    name: "Pulse Circle",
-    description: "Circular logo with pulse line through center",
-    svg: (
-      <svg viewBox="0 0 64 64" className="w-full h-full">
-        <defs>
-          <linearGradient id="grad6" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#14b8a6" />
-            <stop offset="100%" stopColor="#3b82f6" />
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="26" fill="none" stroke="url(#grad6)" strokeWidth="3" />
-        <path
-          d="M10 32 L22 32 L26 20 L30 44 L34 28 L38 36 L42 32 L54 32"
-          fill="none"
-          stroke="url(#grad6)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    id: "bull-minimal",
-    name: "Bull Minimal",
-    description: "Abstract bull horns representing bullish markets",
-    svg: (
-      <svg viewBox="0 0 64 64" className="w-full h-full">
-        <defs>
-          <linearGradient id="grad7" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="100%" stopColor="#34d399" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M12 48 C12 48 12 24 24 16 L32 24"
-          fill="none"
-          stroke="url(#grad7)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M52 48 C52 48 52 24 40 16 L32 24"
-          fill="none"
-          stroke="url(#grad7)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="32" cy="24" r="4" fill="#10b981" />
-      </svg>
-    ),
-  },
-  {
-    id: "arrow-stack",
-    name: "Arrow Stack",
-    description: "Stacked ascending arrows showing growth",
-    svg: (
-      <svg viewBox="0 0 64 64" className="w-full h-full">
-        <defs>
-          <linearGradient id="grad8" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#8b5cf6" />
-          </linearGradient>
-        </defs>
-        <path d="M32 8 L48 24 L40 24 L40 36 L24 36 L24 24 L16 24 Z" fill="#8b5cf6" />
-        <path d="M32 24 L44 36 L38 36 L38 46 L26 46 L26 36 L20 36 Z" fill="#6366f1" opacity="0.7" />
-        <path d="M32 38 L42 48 L36 48 L36 56 L28 56 L28 48 L22 48 Z" fill="#4f46e5" opacity="0.5" />
+        <rect x="28" y="0" width="8" height="16" fill="#0a0a0f" />
       </svg>
     ),
   },
