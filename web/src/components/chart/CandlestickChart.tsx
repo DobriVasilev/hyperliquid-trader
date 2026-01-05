@@ -171,6 +171,72 @@ export function CandlestickChart({
     candleSeriesRef.current.setMarkers(seriesMarkers);
   }, [markers]);
 
+  // Handle wheel events on price/time scales
+  // Scrolling on price scale = zoom price only
+  // Scrolling on time scale = zoom time only
+  // Scrolling elsewhere = zoom both (default)
+  useEffect(() => {
+    if (!containerRef.current || !chartRef.current) return;
+
+    const container = containerRef.current;
+    const chart = chartRef.current;
+
+    const handleWheel = (e: WheelEvent) => {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const priceScaleWidth = 60; // Approximate width of price scale
+      const timeScaleHeight = 30; // Approximate height of time scale
+      const chartWidth = rect.width;
+      const chartHeight = rect.height;
+
+      // Check if cursor is over price scale (right side)
+      if (x > chartWidth - priceScaleWidth) {
+        e.preventDefault();
+        const scaleFactor = e.deltaY > 0 ? 1.1 : 0.9;
+        const priceScale = chart.priceScale("right");
+        const options = priceScale.options();
+        const currentTop = options.scaleMargins?.top ?? 0.1;
+        const currentBottom = options.scaleMargins?.bottom ?? 0.1;
+
+        // Adjust margins to zoom price scale
+        const newMargin = Math.max(0.01, Math.min(0.4,
+          e.deltaY > 0
+            ? currentTop * scaleFactor
+            : currentTop / scaleFactor
+        ));
+
+        priceScale.applyOptions({
+          scaleMargins: { top: newMargin, bottom: newMargin }
+        });
+        return;
+      }
+
+      // Check if cursor is over time scale (bottom)
+      if (y > chartHeight - timeScaleHeight) {
+        e.preventDefault();
+        const timeScale = chart.timeScale();
+        const visibleRange = timeScale.getVisibleLogicalRange();
+        if (visibleRange) {
+          const center = (visibleRange.from + visibleRange.to) / 2;
+          const range = visibleRange.to - visibleRange.from;
+          const scaleFactor = e.deltaY > 0 ? 1.2 : 0.8;
+          const newRange = range * scaleFactor;
+          const newFrom = center - newRange / 2;
+          const newTo = center + newRange / 2;
+          timeScale.setVisibleLogicalRange({ from: newFrom, to: newTo });
+        }
+        return;
+      }
+
+      // Default: let lightweight-charts handle it (zooms both)
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, []);
+
   // Handle click events
   // By default: free price selection (exact cursor position)
   // With Cmd/Ctrl held: snap to nearest candle level (high, low, open, close)

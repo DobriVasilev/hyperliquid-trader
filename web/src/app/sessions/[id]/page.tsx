@@ -11,6 +11,7 @@ import { ChartToolbar, ChartTool } from "@/components/chart/ChartToolbar";
 import { CorrectionModal, CorrectionData } from "@/components/corrections";
 import { CommentInput, CommentThread } from "@/components/comments";
 import { OnlineUsers, CursorOverlay } from "@/components/realtime";
+import { DetectionList } from "@/components/detections/DetectionList";
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -571,92 +572,15 @@ export default function SessionDetailPage({
               )}
             </div>
 
-            {/* Detections Summary */}
+            {/* Detections List with Search/Filter */}
             {session?.detections && session.detections.length > 0 && (
-              <div className="p-4 border-b border-gray-800">
-                <h3 className="text-sm font-medium text-gray-400 mb-3">
-                  Detections ({session.detections.length})
-                </h3>
-                <div className="space-y-2">
-                  {session.detections.slice(0, 10).map((d) => (
-                    <div
-                      key={d.id}
-                      className="text-sm p-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              d.status === "rejected"
-                                ? "bg-gray-500"
-                                : d.status === "confirmed"
-                                ? "bg-blue-500"
-                                : d.detectionType.includes("high")
-                                ? "bg-green-500"
-                                : "bg-red-500"
-                            }`}
-                          />
-                          <span
-                            className={`capitalize ${
-                              d.status === "rejected"
-                                ? "text-gray-500 line-through"
-                                : "text-gray-300"
-                            }`}
-                          >
-                            {d.detectionType.replace("_", " ")}
-                          </span>
-                          {d.status === "confirmed" && (
-                            <span className="text-xs px-1.5 py-0.5 bg-blue-900 text-blue-300 rounded">
-                              confirmed
-                            </span>
-                          )}
-                          {d.status === "rejected" && (
-                            <span className="text-xs px-1.5 py-0.5 bg-red-900 text-red-300 rounded">
-                              deleted
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-gray-500 text-xs">
-                          ${d.price.toFixed(2)}
-                        </span>
-                      </div>
-                      {/* Action buttons - show on hover */}
-                      {d.status === "pending" && (
-                        <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openCorrectionModal("confirm", d)}
-                            className="flex-1 px-2 py-1 text-xs bg-blue-600/20 text-blue-400
-                                     hover:bg-blue-600/30 rounded transition-colors"
-                            title="Confirm detection"
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            onClick={() => openCorrectionModal("move", d)}
-                            className="flex-1 px-2 py-1 text-xs bg-yellow-600/20 text-yellow-400
-                                     hover:bg-yellow-600/30 rounded transition-colors"
-                            title="Modify detection"
-                          >
-                            Modify
-                          </button>
-                          <button
-                            onClick={() => openCorrectionModal("delete", d)}
-                            className="flex-1 px-2 py-1 text-xs bg-red-600/20 text-red-400
-                                     hover:bg-red-600/30 rounded transition-colors"
-                            title="Delete detection"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {session.detections.length > 10 && (
-                    <div className="text-xs text-gray-500 mt-2">
-                      + {session.detections.length - 10} more detections
-                    </div>
-                  )}
-                </div>
+              <div className="flex-1 min-h-0 border-b border-gray-800">
+                <DetectionList
+                  detections={session.detections}
+                  onConfirm={(d) => openCorrectionModal("confirm", d)}
+                  onModify={(d) => openCorrectionModal("move", d)}
+                  onDelete={(d) => openCorrectionModal("delete", d)}
+                />
               </div>
             )}
 
