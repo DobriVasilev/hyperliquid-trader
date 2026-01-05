@@ -37,6 +37,7 @@ export function DetectionList({ detections, onConfirm, onModify, onDelete }: Det
   });
 
   const listRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Filter detections
   const filteredDetections = detections.filter((d) => {
@@ -85,23 +86,30 @@ export function DetectionList({ detections, onConfirm, onModify, onDelete }: Det
   const displayedDetections = filteredDetections.slice(0, displayCount);
   const hasMore = displayCount < filteredDetections.length;
 
-  // Infinite scroll
-  const handleScroll = useCallback(() => {
-    if (!listRef.current || !hasMore) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = listRef.current;
-    if (scrollTop + clientHeight >= scrollHeight - 100) {
-      setDisplayCount((prev) => prev + LOAD_MORE_COUNT);
-    }
-  }, [hasMore]);
-
+  // Infinite scroll using IntersectionObserver
   useEffect(() => {
-    const listEl = listRef.current;
-    if (!listEl) return;
+    if (!hasMore) return;
 
-    listEl.addEventListener("scroll", handleScroll);
-    return () => listEl.removeEventListener("scroll", handleScroll);
-  }, [handleScroll]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setDisplayCount((prev) => prev + LOAD_MORE_COUNT);
+        }
+      },
+      { threshold: 0.1, root: listRef.current }
+    );
+
+    const loadMoreEl = loadMoreRef.current;
+    if (loadMoreEl) {
+      observer.observe(loadMoreEl);
+    }
+
+    return () => {
+      if (loadMoreEl) {
+        observer.unobserve(loadMoreEl);
+      }
+    };
+  }, [hasMore, displayCount]);
 
   // Reset display count when filters change
   useEffect(() => {
@@ -346,8 +354,9 @@ export function DetectionList({ detections, onConfirm, onModify, onDelete }: Det
             ))
           )}
           {hasMore && (
-            <div className="text-center py-4">
-              <div className="text-xs text-gray-500">
+            <div ref={loadMoreRef} className="text-center py-4">
+              <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                <div className="w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
                 Loading more... ({displayedDetections.length} of {filteredDetections.length})
               </div>
             </div>

@@ -68,7 +68,7 @@ export default function SessionDetailPage({
 
   // Correction modal state
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
-  const [correctionMode, setCorrectionMode] = useState<"delete" | "move" | "add" | "confirm">("delete");
+  const [correctionMode, setCorrectionMode] = useState<"delete" | "move" | "add" | "confirm" | "options">("delete");
   const [selectedDetection, setSelectedDetection] = useState<PatternDetection | null>(null);
   const [addData, setAddData] = useState<{ time: number; price: number; candleIndex: number } | null>(null);
 
@@ -210,8 +210,8 @@ export default function SessionDetailPage({
       setSelectedDetection(detection);
       setAddData(null);
       setAutoDetectionType(null);
-      // Default to showing options - user can choose action
-      setCorrectionMode("delete"); // Will show detection info, user picks action
+      // Show options mode - user can choose Confirm/Move/Delete
+      setCorrectionMode("options");
       setCorrectionModalOpen(true);
     }
   };
@@ -718,6 +718,12 @@ export default function SessionDetailPage({
           setMovingDetection(null); // Clear move mode after submit
           // Reset to select only after successful submission
           setActiveTool("select");
+        }}
+        onStartMove={(detection) => {
+          // Close modal and start move mode
+          setCorrectionModalOpen(false);
+          setMovingDetection(detection);
+          setMoveTargetData(null);
         }}
         detection={selectedDetection}
         mode={correctionMode}

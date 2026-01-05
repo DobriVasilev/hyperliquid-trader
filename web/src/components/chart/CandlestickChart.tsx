@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import {
   createChart,
   IChartApi,
@@ -9,6 +9,7 @@ import {
   Time,
   SeriesMarker,
   ColorType,
+  CrosshairMode,
 } from "lightweight-charts";
 
 export interface ChartCandle {
@@ -51,6 +52,15 @@ export function CandlestickChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+
+  // Snap indicator state
+  const [snapIndicator, setSnapIndicator] = useState<{
+    price: number;
+    y: number;
+    level: string;
+    color: string;
+  } | null>(null);
+  const [isModifierHeld, setIsModifierHeld] = useState(false);
 
   // Initialize chart
   useEffect(() => {
@@ -170,6 +180,86 @@ export function CandlestickChart({
 
     candleSeriesRef.current.setMarkers(seriesMarkers);
   }, [markers]);
+
+  // Track modifier key (Cmd/Ctrl) for snap mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey) {
+        setIsModifierHeld(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) {
+        setIsModifierHeld(false);
+        setSnapIndicator(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Handle crosshair move for snap indicator
+  useEffect(() => {
+    if (!chartRef.current || !candleSeriesRef.current) return;
+
+    const chart = chartRef.current;
+
+    const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number } }) => {
+      if (!isModifierHeld || !param.time || !param.point) {
+        setSnapIndicator(null);
+        return;
+      }
+
+      // Find the candle at this time
+      const candle = candles.find((c) => c.time === param.time);
+      if (!candle) {
+        setSnapIndicator(null);
+        return;
+      }
+
+      // Get mouse Y coordinate and find closest price level
+      const y = param.point.y;
+      const hoveredPrice = candleSeriesRef.current?.coordinateToPrice(y);
+      if (hoveredPrice === null || hoveredPrice === undefined) {
+        setSnapIndicator(null);
+        return;
+      }
+
+      const priceLevels = [
+        { price: candle.high, name: "HIGH", color: "#26a69a" },
+        { price: candle.low, name: "LOW", color: "#ef5350" },
+        { price: candle.open, name: "OPEN", color: "#9e9e9e" },
+        { price: candle.close, name: "CLOSE", color: "#ffffff" },
+      ];
+
+      const closest = priceLevels.reduce((best, level) =>
+        Math.abs(level.price - hoveredPrice) < Math.abs(best.price - hoveredPrice) ? level : best
+      );
+
+      const snapY = candleSeriesRef.current?.priceToCoordinate(closest.price);
+      if (snapY !== null && snapY !== undefined) {
+        setSnapIndicator({
+          price: closest.price,
+          y: snapY,
+          level: closest.name,
+          color: closest.color,
+        });
+      }
+    };
+
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
+    };
+  }, [candles, isModifierHeld]);
 
   // Handle wheel events on price/time scales
   // Scrolling on price scale = zoom price only
@@ -352,11 +442,44 @@ export function CandlestickChart({
   );
 
   return (
-    <div
-      ref={containerRef}
-      className={`w-full ${className}`}
-      style={{ height }}
-      onClick={handleClick}
-    />
+    <div className="relative">
+      <div
+        ref={containerRef}
+        className={`w-full ${className}`}
+        style={{ height }}
+        onClick={handleClick}
+      />
+
+      {/* Snap indicator overlay */}
+      {snapIndicator && isModifierHeld && (
+        <>
+          {/* Horizontal line at snap level */}
+          <div
+            className="absolute left-0 right-16 pointer-events-none"
+            style={{
+              top: snapIndicator.y,
+              height: 1,
+              backgroundColor: snapIndicator.color,
+              opacity: 0.8,
+            }}
+          />
+          {/* Snap level label */}
+          <div
+            className="absolute right-16 pointer-events-none px-1.5 py-0.5 text-xs font-mono rounded"
+            style={{
+              top: snapIndicator.y - 10,
+              backgroundColor: snapIndicator.color,
+              color: snapIndicator.color === "#ffffff" ? "#000" : "#fff",
+            }}
+          >
+            {snapIndicator.level} ${snapIndicator.price.toFixed(2)}
+          </div>
+          {/* Snap mode indicator */}
+          <div className="absolute top-2 left-2 px-2 py-1 bg-blue-600/80 rounded text-xs text-white font-medium pointer-events-none">
+            SNAP MODE (Cmd/Ctrl)
+          </div>
+        </>
+      )}
+    </div>
   );
 }

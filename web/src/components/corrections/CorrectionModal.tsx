@@ -7,8 +7,9 @@ interface CorrectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (correction: CorrectionData) => Promise<void>;
+  onStartMove?: (detection: PatternDetection) => void; // Callback to start move mode
   detection?: PatternDetection | null;
-  mode: "delete" | "move" | "add" | "confirm";
+  mode: "delete" | "move" | "add" | "confirm" | "options"; // Added "options" mode
   // For add mode
   addData?: {
     time: number;
@@ -56,6 +57,7 @@ export function CorrectionModal({
   isOpen,
   onClose,
   onSubmit,
+  onStartMove,
   detection,
   mode,
   addData,
@@ -66,6 +68,7 @@ export function CorrectionModal({
   const [detectionType, setDetectionType] = useState("swing_low");
   const [structure, setStructure] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [internalMode, setInternalMode] = useState<"delete" | "move" | "add" | "confirm">("delete");
 
   // Reset form when modal opens
   useEffect(() => {
@@ -78,10 +81,17 @@ export function CorrectionModal({
         setDetectionType(detection?.detectionType || "swing_low");
       }
       setStructure(detection?.structure || "");
+      // Set internal mode from prop mode (unless it's "options")
+      if (mode !== "options") {
+        setInternalMode(mode);
+      }
     }
   }, [isOpen, detection, autoDetectionType, mode]);
 
   if (!isOpen) return null;
+
+  // Get the effective mode (use internalMode for options, otherwise use mode)
+  const effectiveMode = mode === "options" ? internalMode : mode;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,11 +100,11 @@ export function CorrectionModal({
     setIsSubmitting(true);
     try {
       const correctionData: CorrectionData = {
-        correctionType: mode,
+        correctionType: effectiveMode,
         reason: reason.trim(),
       };
 
-      if (mode === "delete" || mode === "confirm" || mode === "move") {
+      if (effectiveMode === "delete" || effectiveMode === "confirm" || effectiveMode === "move") {
         if (detection) {
           correctionData.detectionId = detection.id;
           correctionData.originalIndex = detection.candleIndex;
@@ -104,7 +114,7 @@ export function CorrectionModal({
         }
       }
 
-      if (mode === "add" && addData) {
+      if (effectiveMode === "add" && addData) {
         correctionData.correctedIndex = addData.candleIndex;
         correctionData.correctedTime = addData.time * 1000; // Convert to ms
         correctionData.correctedPrice = addData.price;
@@ -112,7 +122,7 @@ export function CorrectionModal({
         correctionData.correctedStructure = structure || undefined;
       }
 
-      if (mode === "move" && detection && moveTargetData) {
+      if (effectiveMode === "move" && detection && moveTargetData) {
         // For move, use the new position data
         correctionData.correctedIndex = moveTargetData.candleIndex;
         correctionData.correctedTime = moveTargetData.time * 1000; // Convert to ms
@@ -130,12 +140,21 @@ export function CorrectionModal({
     }
   };
 
+  // Handle starting move mode
+  const handleStartMove = () => {
+    if (detection && onStartMove) {
+      onClose();
+      onStartMove(detection);
+    }
+  };
+
   const getModeTitle = () => {
-    switch (mode) {
+    if (mode === "options") return "Detection Options";
+    switch (effectiveMode) {
       case "delete":
         return "Delete Detection";
       case "move":
-        return "Modify Detection";
+        return "Move Detection";
       case "add":
         return "Add Detection";
       case "confirm":
@@ -146,11 +165,12 @@ export function CorrectionModal({
   };
 
   const getModeDescription = () => {
-    switch (mode) {
+    if (mode === "options") return "What would you like to do with this detection?";
+    switch (effectiveMode) {
       case "delete":
         return "Mark this detection as incorrect and remove it from the analysis.";
       case "move":
-        return "Modify the type or structure of this detection.";
+        return "Move this detection to a new position on the chart.";
       case "add":
         return "Add a new detection that the algorithm missed.";
       case "confirm":
@@ -161,7 +181,7 @@ export function CorrectionModal({
   };
 
   const getModeColor = () => {
-    switch (mode) {
+    switch (effectiveMode) {
       case "delete":
         return "bg-red-600 hover:bg-red-700";
       case "move":
@@ -174,6 +194,9 @@ export function CorrectionModal({
         return "bg-gray-600 hover:bg-gray-700";
     }
   };
+
+  // Show options UI when in options mode and no specific action selected yet
+  const showOptionsUI = mode === "options" && !moveTargetData;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -194,8 +217,8 @@ export function CorrectionModal({
 
           {/* Body */}
           <div className="px-6 py-4 space-y-4">
-            {/* Detection info for delete/confirm/move */}
-            {detection && (mode === "delete" || mode === "confirm" || mode === "move") && (
+            {/* Detection info for all modes with detection */}
+            {detection && (
               <div className="bg-gray-800 rounded-lg p-3">
                 <div className="text-sm text-gray-400 mb-1">Detection</div>
                 <div className="flex items-center gap-2">
@@ -216,11 +239,75 @@ export function CorrectionModal({
                 <div className="text-sm text-gray-500 mt-1">
                   Price: ${detection.price.toFixed(2)}
                 </div>
+                <div className="text-xs text-gray-600 mt-0.5">
+                  {new Date(detection.candleTime).toLocaleString()}
+                </div>
+              </div>
+            )}
+
+            {/* Options mode - show action buttons */}
+            {showOptionsUI && detection && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setInternalMode("confirm")}
+                  className={`w-full p-3 rounded-lg border transition-colors flex items-center gap-3 ${
+                    internalMode === "confirm"
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-gray-700 hover:border-gray-600 hover:bg-gray-800"
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <div className="font-medium text-white">Confirm</div>
+                    <div className="text-xs text-gray-500">Mark as correct</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleStartMove}
+                  className="w-full p-3 rounded-lg border border-gray-700 hover:border-gray-600 hover:bg-gray-800 transition-colors flex items-center gap-3"
+                >
+                  <div className="w-8 h-8 rounded-full bg-yellow-600/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <div className="font-medium text-white">Move</div>
+                    <div className="text-xs text-gray-500">Click chart to set new position</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInternalMode("delete")}
+                  className={`w-full p-3 rounded-lg border transition-colors flex items-center gap-3 ${
+                    internalMode === "delete"
+                      ? "border-red-500 bg-red-500/10"
+                      : "border-gray-700 hover:border-gray-600 hover:bg-gray-800"
+                  }`}
+                >
+                  <div className="w-8 h-8 rounded-full bg-red-600/20 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <div className="font-medium text-white">Delete</div>
+                    <div className="text-xs text-gray-500">Remove from analysis</div>
+                  </div>
+                </button>
               </div>
             )}
 
             {/* Add position info */}
-            {mode === "add" && addData && (
+            {effectiveMode === "add" && addData && (
               <div className="bg-gray-800 rounded-lg p-3">
                 <div className="text-sm text-gray-400 mb-1">Position</div>
                 <div className="text-sm text-gray-300">
@@ -233,7 +320,7 @@ export function CorrectionModal({
             )}
 
             {/* Move target info */}
-            {mode === "move" && moveTargetData && (
+            {effectiveMode === "move" && moveTargetData && (
               <div className="bg-yellow-900/30 border border-yellow-800 rounded-lg p-3">
                 <div className="text-sm text-yellow-400 mb-1">Move to</div>
                 <div className="text-sm text-gray-300">
@@ -246,7 +333,7 @@ export function CorrectionModal({
             )}
 
             {/* Detection type selector for add/move */}
-            {(mode === "add" || mode === "move") && (
+            {(effectiveMode === "add" || (effectiveMode === "move" && moveTargetData)) && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Detection Type
@@ -266,35 +353,35 @@ export function CorrectionModal({
               </div>
             )}
 
-{/* Structure selector removed - user feedback: HH/HL/LH/LL labels are unnecessary */}
-
-            {/* Reason */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Reason <span className="text-red-400">*</span>
-              </label>
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder={
-                  mode === "delete"
-                    ? "Why is this detection incorrect?"
-                    : mode === "add"
-                    ? "Why should this detection exist?"
-                    : mode === "confirm"
-                    ? "Any notes about this confirmation?"
-                    : "Why are you modifying this?"
-                }
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg
-                         text-white placeholder-gray-500 focus:outline-none focus:border-blue-500
-                         resize-none"
-                rows={3}
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                This helps improve the detection algorithm.
-              </p>
-            </div>
+            {/* Reason - only show when action selected (not in pure options mode) */}
+            {(!showOptionsUI || internalMode === "confirm" || internalMode === "delete") && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Reason <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder={
+                    effectiveMode === "delete"
+                      ? "Why is this detection incorrect?"
+                      : effectiveMode === "add"
+                      ? "Why should this detection exist?"
+                      : effectiveMode === "confirm"
+                      ? "Any notes about this confirmation?"
+                      : "Why are you modifying this?"
+                  }
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg
+                           text-white placeholder-gray-500 focus:outline-none focus:border-blue-500
+                           resize-none"
+                  rows={3}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This helps improve the detection algorithm.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -307,26 +394,29 @@ export function CorrectionModal({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !reason.trim()}
-              className={`px-4 py-2 text-white rounded-lg font-medium transition-colors
-                       disabled:opacity-50 flex items-center gap-2 ${getModeColor()}`}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  {mode === "delete" && "Delete"}
-                  {mode === "move" && "Modify"}
-                  {mode === "add" && "Add Detection"}
-                  {mode === "confirm" && "Confirm"}
-                </>
-              )}
-            </button>
+            {/* Only show submit button when action is selected and we have reason */}
+            {(!showOptionsUI || internalMode === "confirm" || internalMode === "delete") && (
+              <button
+                type="submit"
+                disabled={isSubmitting || !reason.trim()}
+                className={`px-4 py-2 text-white rounded-lg font-medium transition-colors
+                         disabled:opacity-50 flex items-center gap-2 ${getModeColor()}`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    {effectiveMode === "delete" && "Delete"}
+                    {effectiveMode === "move" && "Move"}
+                    {effectiveMode === "add" && "Add Detection"}
+                    {effectiveMode === "confirm" && "Confirm"}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </form>
       </div>
