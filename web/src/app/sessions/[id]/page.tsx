@@ -450,7 +450,7 @@ export default function SessionDetailPage({
                 height={600}
               />
               {/* Cursor overlay for collaborative editing */}
-              <CursorOverlay cursors={cursors} containerRef={chartContainerRef} />
+              <CursorOverlay cursors={cursors} containerRef={chartContainerRef} currentUserId={authSession?.user?.id} />
             </div>
           )}
 

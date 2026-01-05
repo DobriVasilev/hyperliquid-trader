@@ -5,6 +5,7 @@ import { CursorPosition } from "@/lib/realtime";
 interface CursorOverlayProps {
   cursors: Map<string, CursorPosition>;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  currentUserId?: string;
 }
 
 // Generate a consistent color from user ID
@@ -29,14 +30,22 @@ function getUserColor(userId: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function CursorOverlay({ cursors, containerRef }: CursorOverlayProps) {
+export function CursorOverlay({ cursors, containerRef, currentUserId }: CursorOverlayProps) {
   if (!containerRef.current) return null;
 
   const containerRect = containerRef.current.getBoundingClientRect();
 
+  // Filter out current user's cursor - don't show your own cursor
+  const otherCursors = Array.from(cursors.entries()).filter(
+    ([userId]) => userId !== currentUserId
+  );
+
+  // Don't render anything if there are no other users' cursors
+  if (otherCursors.length === 0) return null;
+
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden z-50">
-      {Array.from(cursors.entries()).map(([userId, cursor]) => {
+      {otherCursors.map(([userId, cursor]) => {
         const color = getUserColor(userId);
 
         // Ensure cursor is within container bounds

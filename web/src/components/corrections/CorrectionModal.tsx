@@ -240,28 +240,7 @@ export function CorrectionModal({
               </div>
             )}
 
-            {/* Structure selector for swing types */}
-            {(mode === "add" || mode === "move") &&
-              (detectionType === "swing_high" || detectionType === "swing_low") && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Structure (Optional)
-                  </label>
-                  <select
-                    value={structure}
-                    onChange={(e) => setStructure(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg
-                             text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">None</option>
-                    {STRUCTURES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label} ({s.value})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+{/* Structure selector removed - user feedback: HH/HL/LH/LL labels are unnecessary */}
 
             {/* Reason */}
             <div>

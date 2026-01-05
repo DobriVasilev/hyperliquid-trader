@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 interface FeatureItemProps {
   name: string;
@@ -232,6 +233,8 @@ const FeatureItem: React.FC<FeatureItemProps> = ({ name, value, position }) => {
 
 export const HeroOdyssey: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { data: session, status } = useSession();
+  const isLoggedIn = status === "authenticated";
   const lightningHue = 220;
 
   const containerVariants = {
@@ -288,8 +291,22 @@ export const HeroOdyssey: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <Link href="/auth/login" className="hidden md:block px-4 py-2 text-sm hover:text-gray-300 transition-colors">Sign In</Link>
-            <Link href="/sessions/new" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors">Get Started</Link>
+            {isLoggedIn ? (
+              <>
+                <Link href="/sessions" className="hidden md:block px-4 py-2 text-sm hover:text-gray-300 transition-colors">Dashboard</Link>
+                <Link href="/sessions" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors flex items-center gap-2">
+                  {session?.user?.image && (
+                    <img src={session.user.image} alt="" className="w-5 h-5 rounded-full" />
+                  )}
+                  {session?.user?.name?.split(' ')[0] || 'Dashboard'}
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login" className="hidden md:block px-4 py-2 text-sm hover:text-gray-300 transition-colors">Sign In</Link>
+                <Link href="/sessions/new" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors">Get Started</Link>
+              </>
+            )}
             {/* Mobile menu button */}
             <button
               className="md:hidden p-2 rounded-md focus:outline-none"
@@ -327,8 +344,19 @@ export const HeroOdyssey: React.FC = () => {
               </button>
               <Link href="/sessions" className="px-6 py-3" onClick={() => setMobileMenuOpen(false)}>Sessions</Link>
               <Link href="/sessions/new" className="px-6 py-3 bg-gray-800/50 rounded-full" onClick={() => setMobileMenuOpen(false)}>New Session</Link>
-              <Link href="/auth/login" className="px-6 py-3" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
-              <Link href="/sessions/new" className="px-6 py-3 bg-blue-600 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
+              {isLoggedIn ? (
+                <Link href="/sessions" className="px-6 py-3 bg-blue-600 rounded-full flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                  {session?.user?.image && (
+                    <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" />
+                  )}
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/auth/login" className="px-6 py-3" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
+                  <Link href="/sessions/new" className="px-6 py-3 bg-blue-600 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
+                </>
+              )}
             </div>
           </motion.div>
         )}
@@ -443,6 +471,19 @@ export const HeroOdyssey: React.FC = () => {
         {/* Planet/sphere */}
         <div className="z-10 absolute top-[55%] left-1/2 transform -translate-x-1/2 w-[600px] h-[600px] backdrop-blur-3xl rounded-full bg-[radial-gradient(circle_at_25%_90%,_#1e386b_15%,_#000000de_70%,_#000000ed_100%)]"></div>
       </motion.div>
+
+      {/* Footer */}
+      <footer className="absolute bottom-0 left-0 right-0 z-30 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+            <p>© 2025 Systems Trader. All rights reserved.</p>
+            <div className="flex items-center gap-6">
+              <Link href="/privacy" className="hover:text-gray-300 transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-gray-300 transition-colors">Terms of Service</Link>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
