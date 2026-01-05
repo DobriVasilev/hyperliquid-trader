@@ -741,9 +741,13 @@ export default function SessionDetailPage({
         isOpen={correctionModalOpen}
         onClose={() => {
           setCorrectionModalOpen(false);
-          setActiveTool("select"); // Reset tool after modal closes
+          // Don't reset tool on cancel - keep it selected
         }}
-        onSubmit={handleCorrectionSubmit}
+        onSubmit={async (data) => {
+          await handleCorrectionSubmit(data);
+          // Reset to select only after successful submission
+          setActiveTool("select");
+        }}
         detection={selectedDetection}
         mode={correctionMode}
         addData={addData || undefined}

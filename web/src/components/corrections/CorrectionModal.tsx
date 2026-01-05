@@ -37,10 +37,6 @@ export interface CorrectionData {
 const DETECTION_TYPES = [
   { value: "swing_high", label: "Swing High" },
   { value: "swing_low", label: "Swing Low" },
-  { value: "bos_bullish", label: "BOS Bullish" },
-  { value: "bos_bearish", label: "BOS Bearish" },
-  { value: "msb_bullish", label: "MSB Bullish" },
-  { value: "msb_bearish", label: "MSB Bearish" },
 ];
 
 const STRUCTURES = [
@@ -196,7 +192,7 @@ export function CorrectionModal({
                 <div className="flex items-center gap-2">
                   <div
                     className={`w-3 h-3 rounded-full ${
-                      detection.detectionType.includes("high") ? "bg-red-500" : "bg-green-500"
+                      detection.detectionType.includes("high") ? "bg-green-500" : "bg-red-500"
                     }`}
                   />
                   <span className="font-medium capitalize">
