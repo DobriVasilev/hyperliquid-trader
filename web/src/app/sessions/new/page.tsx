@@ -25,6 +25,7 @@ export default function NewSessionPage() {
   const [markers, setMarkers] = useState<ChartMarker[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [sessionName, setSessionName] = useState("");
+  const [isQuickStarting, setIsQuickStarting] = useState(false);
 
   const { candles, isLoading, error } = useCandles({
     symbol,
@@ -84,6 +85,50 @@ export default function NewSessionPage() {
     // Placeholder for now
   };
 
+  // Quick start - create session and run detection immediately
+  const quickStart = async () => {
+    if (candles.length === 0) return;
+
+    setIsQuickStarting(true);
+    try {
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${symbol} ${timeframe} Quick Session`,
+          symbol,
+          timeframe,
+          patternType,
+          candleData: { candles },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to create session");
+      }
+
+      // Run detection on the new session
+      await fetch(`/api/sessions/${data.data.id}/detections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patternType,
+          candleData: { candles },
+        }),
+      });
+
+      // Redirect to the new session
+      router.push(`/sessions/${data.data.id}`);
+    } catch (err) {
+      console.error("Error in quick start:", err);
+      alert(err instanceof Error ? err.message : "Failed to create session");
+    } finally {
+      setIsQuickStarting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
@@ -110,8 +155,29 @@ export default function NewSessionPage() {
                        placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
             <button
+              onClick={quickStart}
+              disabled={isLoading || candles.length === 0 || isQuickStarting || isSaving}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium
+                       hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              title="Create session and run detection immediately"
+            >
+              {isQuickStarting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Quick Start
+                </>
+              )}
+            </button>
+            <button
               onClick={createSession}
-              disabled={isLoading || candles.length === 0 || isSaving}
+              disabled={isLoading || candles.length === 0 || isSaving || isQuickStarting}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium
                        hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
             >

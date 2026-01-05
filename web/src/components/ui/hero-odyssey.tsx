@@ -293,8 +293,8 @@ export const HeroOdyssey: React.FC = () => {
           <div className="flex items-center space-x-4">
             {isLoggedIn ? (
               <>
-                <Link href="/sessions" className="hidden md:block px-4 py-2 text-sm hover:text-gray-300 transition-colors">Dashboard</Link>
-                <Link href="/sessions" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors flex items-center gap-2">
+                <Link href="/dashboard" className="hidden md:block px-4 py-2 text-sm hover:text-gray-300 transition-colors">Dashboard</Link>
+                <Link href="/dashboard" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors flex items-center gap-2">
                   {session?.user?.image && (
                     <img src={session.user.image} alt="" className="w-5 h-5 rounded-full" />
                   )}
@@ -345,7 +345,7 @@ export const HeroOdyssey: React.FC = () => {
               <Link href="/sessions" className="px-6 py-3" onClick={() => setMobileMenuOpen(false)}>Sessions</Link>
               <Link href="/sessions/new" className="px-6 py-3 bg-gray-800/50 rounded-full" onClick={() => setMobileMenuOpen(false)}>New Session</Link>
               {isLoggedIn ? (
-                <Link href="/sessions" className="px-6 py-3 bg-blue-600 rounded-full flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/dashboard" className="px-6 py-3 bg-blue-600 rounded-full flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
                   {session?.user?.image && (
                     <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" />
                   )}

@@ -429,19 +429,39 @@ export default function SessionDetailPage({
               <span>{session._count.corrections} corrections</span>
               <span>{session._count.comments} comments</span>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              {session.createdBy.image ? (
-                <img
-                  src={session.createdBy.image}
-                  alt={session.createdBy.name || ""}
-                  className="w-5 h-5 rounded-full"
-                />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-gray-700" />
-              )}
-              <span className="text-gray-400">
-                {session.createdBy.name || session.createdBy.email}
-              </span>
+            <div className="ml-auto flex items-center gap-4">
+              <button
+                onClick={() => {
+                  const url = window.location.href;
+                  navigator.clipboard.writeText(url).then(() => {
+                    // Show toast or feedback
+                    const btn = document.activeElement as HTMLButtonElement;
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = `<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Copied!</span>`;
+                    setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+                  });
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </button>
+              <div className="flex items-center gap-2">
+                {session.createdBy.image ? (
+                  <img
+                    src={session.createdBy.image}
+                    alt={session.createdBy.name || ""}
+                    className="w-5 h-5 rounded-full"
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-gray-700" />
+                )}
+                <span className="text-gray-400">
+                  {session.createdBy.name || session.createdBy.email}
+                </span>
+              </div>
             </div>
           </div>
         </div>
