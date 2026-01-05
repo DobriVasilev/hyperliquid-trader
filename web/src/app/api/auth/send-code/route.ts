@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { Resend } from "resend";
+import sgMail from "@sendgrid/mail";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 // Generate a random 6-digit code
 function generateCode(): string {
@@ -66,10 +68,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Send email with code
-    if (process.env.RESEND_API_KEY) {
-      await resend.emails.send({
-        from: process.env.EMAIL_FROM || "Systems Trader <noreply@systemstrader.io>",
+    if (process.env.SENDGRID_API_KEY) {
+      await sgMail.send({
         to: normalizedEmail,
+        from: process.env.EMAIL_FROM || "noreply@systemstrader.io",
         subject: "Your Systems Trader login code",
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 400px; margin: 0 auto; padding: 40px 20px;">
