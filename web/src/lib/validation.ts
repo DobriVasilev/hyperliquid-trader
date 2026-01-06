@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-// All supported timeframes (Hyperliquid min is 1m, no sub-minute)
+// Native Hyperliquid timeframes only (no aggregation, no bugs)
 const VALID_TIMEFRAMES = [
-  "1m", "3m", "5m", "15m", "30m", "45m",
-  "1h", "2h", "3h", "4h", "6h", "8h", "12h",
-  "1d", "3d", "1w", "1M"
+  "1m", "5m", "15m", "30m",
+  "1h", "4h",
+  "1d", "1w", "1M"
 ] as const;
 
 // Session schemas

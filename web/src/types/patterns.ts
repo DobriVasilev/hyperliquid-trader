@@ -79,12 +79,11 @@ export type PatternType =
 // Timeframe now supports custom values
 export type Timeframe = string;
 
-// Standard timeframes for quick access
-// Note: Hyperliquid's minimum is 1m, so no sub-minute timeframes
+// Standard timeframes - only native Hyperliquid intervals
 export const STANDARD_TIMEFRAMES = [
-  "1m", "3m", "5m", "15m", "30m", "45m",
-  "1h", "2h", "3h", "4h", "6h", "8h", "12h",
-  "1d", "3d", "1w", "1M"
+  "1m", "5m", "15m", "30m",
+  "1h", "4h",
+  "1d", "1w", "1M"
 ] as const;
 
 // ============================================================================
