@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSessions, PatternSession } from "@/hooks/useSessions";
 
 function formatDate(dateString: string): string {
@@ -53,7 +53,15 @@ function DeleteModal({
   );
 }
 
-// Share modal
+// Share modal - Google Docs style
+interface ShareUser {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+  permission?: string;
+}
+
 function ShareModal({
   session,
   onClose,
@@ -65,17 +73,37 @@ function ShareModal({
   const [permission, setPermission] = useState<"view" | "comment" | "edit">("view");
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [sharedUsers, setSharedUsers] = useState<ShareUser[]>([]);
+  const [isPublic, setIsPublic] = useState(false);
+  const [isLoadingShares, setIsLoadingShares] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  // Fetch current shares
+  useEffect(() => {
+    const fetchShares = async () => {
+      try {
+        const response = await fetch(`/api/sessions/${session.id}/share`);
+        const data = await response.json();
+        if (data.success) {
+          setSharedUsers(data.data.map((s: { user: ShareUser; permission: string }) => ({
+            ...s.user,
+            permission: s.permission,
+          })));
+        }
+      } catch {
+        // Ignore errors
+      } finally {
+        setIsLoadingShares(false);
+      }
+    };
+    fetchShares();
+  }, [session.id]);
 
   const handleShare = async () => {
-    if (!email.trim()) {
-      setError("Email is required");
-      return;
-    }
+    if (!email.trim()) return;
 
     setIsSharing(true);
     setError("");
-    setSuccess("");
 
     try {
       const response = await fetch(`/api/sessions/${session.id}/share`, {
@@ -90,7 +118,8 @@ function ShareModal({
         throw new Error(data.error || "Failed to share");
       }
 
-      setSuccess(`Shared with ${email}`);
+      // Add to list
+      setSharedUsers(prev => [...prev, { ...data.data.user, permission }]);
       setEmail("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to share");
@@ -99,79 +128,175 @@ function ShareModal({
     }
   };
 
+  const handleRemoveUser = async (userId: string) => {
+    try {
+      await fetch(`/api/sessions/${session.id}/share?userId=${userId}`, {
+        method: "DELETE",
+      });
+      setSharedUsers(prev => prev.filter(u => u.id !== userId));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/sessions/${session.id}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && email.trim()) {
+      handleShare();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-gray-900 rounded-xl shadow-xl border border-gray-800 w-full max-w-md mx-4 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Share Session</h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-800 rounded transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-gray-900 rounded-2xl shadow-2xl border border-gray-800 w-full max-w-lg mx-4"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4">
+          <h2 className="text-lg font-medium text-white">
+            Share "{session.name}"
+          </h2>
         </div>
 
-        <p className="text-gray-400 text-sm mb-4">
-          Share <span className="text-white font-medium">{session.name}</span> with another user
-        </p>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Email address</label>
+        {/* Add people input */}
+        <div className="px-6 pb-4">
+          <div className="flex gap-2">
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg
-                       focus:outline-none focus:border-blue-500 text-white"
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
+              onKeyDown={handleKeyDown}
+              placeholder="Add people by email"
+              className="flex-1 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg
+                       focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                       text-white placeholder-gray-500 text-sm"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Permission</label>
             <select
               value={permission}
               onChange={(e) => setPermission(e.target.value as "view" | "comment" | "edit")}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg
-                       focus:outline-none focus:border-blue-500 text-white"
+              className="px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg
+                       focus:outline-none focus:border-blue-500 text-white text-sm"
             >
-              <option value="view">View only</option>
-              <option value="comment">Can comment</option>
-              <option value="edit">Can edit</option>
+              <option value="view">Viewer</option>
+              <option value="comment">Commenter</option>
+              <option value="edit">Editor</option>
             </select>
-          </div>
-
-          {error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
-          {success && (
-            <p className="text-green-400 text-sm">{success}</p>
-          )}
-
-          <div className="flex gap-3 justify-end pt-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
-            >
-              Close
-            </button>
             <button
               onClick={handleShare}
-              disabled={isSharing}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700
-                       transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                       flex items-center gap-2"
+              disabled={isSharing || !email.trim()}
+              className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700
+                       transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
             >
-              {isSharing && (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              )}
-              Share
+              {isSharing ? "..." : "Add"}
             </button>
           </div>
+          {error && (
+            <p className="text-red-400 text-xs mt-2">{error}</p>
+          )}
+        </div>
+
+        {/* People with access */}
+        <div className="px-6 pb-4">
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
+            People with access
+          </h3>
+          <div className="space-y-2">
+            {/* Owner */}
+            <div className="flex items-center gap-3 py-2">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                {session.createdBy?.name?.charAt(0) || "U"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-white truncate">
+                  {session.createdBy?.name || "Unknown"} <span className="text-gray-500">(you)</span>
+                </div>
+                <div className="text-xs text-gray-500 truncate">{session.createdBy?.email}</div>
+              </div>
+              <span className="text-xs text-gray-500">Owner</span>
+            </div>
+
+            {/* Shared users */}
+            {isLoadingShares ? (
+              <div className="py-2 text-sm text-gray-500">Loading...</div>
+            ) : (
+              sharedUsers.map(user => (
+                <div key={user.id} className="flex items-center gap-3 py-2 group">
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-medium">
+                    {user.name?.charAt(0) || user.email?.charAt(0) || "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-white truncate">{user.name || user.email}</div>
+                    <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                  </div>
+                  <span className="text-xs text-gray-500 capitalize">{user.permission}</span>
+                  <button
+                    onClick={() => handleRemoveUser(user.id)}
+                    className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* General access */}
+        <div className="px-6 pb-4 border-t border-gray-800 pt-4">
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
+            General access
+          </h3>
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isPublic ? "bg-green-600/20" : "bg-gray-800"}`}>
+              {isPublic ? (
+                <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1">
+              <button
+                onClick={() => setIsPublic(!isPublic)}
+                className="text-sm text-white hover:underline text-left"
+              >
+                {isPublic ? "Anyone with the link" : "Restricted"}
+              </button>
+              <div className="text-xs text-gray-500">
+                {isPublic ? "Anyone with the link can view" : "Only people with access can open"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-800 flex items-center justify-between">
+          <button
+            onClick={handleCopyLink}
+            className="flex items-center gap-2 px-4 py-2 text-blue-400 hover:bg-gray-800 rounded-lg transition-colors text-sm font-medium"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>
