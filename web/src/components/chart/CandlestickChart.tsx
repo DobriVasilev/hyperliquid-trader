@@ -92,6 +92,15 @@ export function CandlestickChart({
   // Move mode cursor position
   const [moveModePosition, setMoveModePosition] = useState<{ x: number; y: number } | null>(null);
 
+  // Marker price line positions (for rendering horizontal lines from markers)
+  const [markerLinePositions, setMarkerLinePositions] = useState<Array<{
+    id: string;
+    x: number;
+    y: number;
+    color: string;
+    price: number;
+  }>>([]);
+
   // Save chart position to localStorage
   const saveChartPosition = useCallback(() => {
     if (!chartRef.current || !sessionId) return;
@@ -286,6 +295,67 @@ export function CandlestickChart({
     seriesMarkers.sort((a, b) => (a.time as number) - (b.time as number));
     candleSeriesRef.current.setMarkers(seriesMarkers);
   }, [markers, hiddenMarkerIds]);
+
+  // Calculate marker screen positions for price lines
+  const updateMarkerLinePositions = useCallback(() => {
+    if (!chartRef.current || !candleSeriesRef.current) return;
+
+    const timeScale = chartRef.current.timeScale();
+    const visibleMarkers = markers.filter(m => !hiddenMarkerIds.includes(m.id));
+
+    const positions = visibleMarkers.map(marker => {
+      const x = timeScale.timeToCoordinate(marker.time as Time);
+      if (x === null) return null;
+
+      // Get the candle to find the actual price
+      const candle = candles.find(c => c.time === marker.time);
+      if (!candle) return null;
+
+      // Determine the price based on marker position
+      let price: number;
+      if (marker.position === "aboveBar") {
+        price = candle.high;
+      } else if (marker.position === "belowBar") {
+        price = candle.low;
+      } else {
+        price = (candle.high + candle.low) / 2;
+      }
+
+      const y = candleSeriesRef.current!.priceToCoordinate(price);
+      if (y === null) return null;
+
+      return {
+        id: marker.id,
+        x,
+        y,
+        color: marker.color,
+        price,
+      };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+    setMarkerLinePositions(positions);
+  }, [markers, hiddenMarkerIds, candles]);
+
+  // Update marker line positions when chart view changes
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const chart = chartRef.current;
+
+    // Update positions initially
+    updateMarkerLinePositions();
+
+    // Update when visible range changes (scroll/zoom)
+    const handleRangeChange = () => {
+      updateMarkerLinePositions();
+    };
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(handleRangeChange);
+
+    return () => {
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(handleRangeChange);
+    };
+  }, [updateMarkerLinePositions]);
 
   // Track modifier key (Cmd/Ctrl) for snap mode - use global listener
   useEffect(() => {
@@ -823,6 +893,22 @@ export function CandlestickChart({
           }}
         />
       )}
+
+      {/* Marker price lines - horizontal lines showing exact price level */}
+      {markerLinePositions.map((pos) => (
+        <div
+          key={`price-line-${pos.id}`}
+          className="absolute pointer-events-none"
+          style={{
+            left: pos.x + 15, // Start after the marker dot
+            width: 40, // Short line extending right
+            top: pos.y,
+            height: 1,
+            backgroundColor: pos.color,
+            opacity: 0.6,
+          }}
+        />
+      ))}
     </div>
   );
 }
