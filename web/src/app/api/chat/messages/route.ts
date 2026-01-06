@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { broadcastMessage, broadcastToUser } from "../stream/route";
+import { checkMessageRateLimit, publishChatMessage } from "@/lib/redis";
 
 // Parse @mentions from content
 function parseMentions(content: string): string[] {
@@ -135,6 +136,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Rate limiting (10 messages per 10 seconds)
+    const allowed = await checkMessageRateLimit(session.user.id);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many messages. Please slow down." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { content, attachments, replyToId, channelId } = body;
 
@@ -270,12 +280,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Broadcast to all connected clients
+    // Broadcast to all connected clients on this server
     broadcastMessage({
       type: "new_message",
       message: { ...message, reactions: [] },
       channelId: channelId || null,
     }, session.user.id);
+
+    // Also publish to Redis for cross-server messaging
+    await publishChatMessage({ ...message, reactions: [] }, channelId);
 
     return NextResponse.json({
       success: true,

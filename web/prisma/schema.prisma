@@ -49,6 +49,11 @@ model User {
   messageReads       MessageRead[]
   typingIndicators   TypingIndicator[]
   chatNotifications  ChatNotification[]
+  chatAttachments    ChatAttachment[]
+
+  // E2E Encryption
+  keyBundle          UserKeyBundle?
+  encryptedSessions  EncryptedSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -359,6 +364,7 @@ model ChatChannel {
   // Relations
   messages    ChatMessage[]
   members     ChatChannelMember[]
+  attachments ChatAttachment[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -617,4 +623,128 @@ model DirectMessage {
   @@index([receiverId, read])
   @@index([createdAt])
   @@index([replyToId])
+}
+
+// Chat Attachments (files, images, audio, video)
+model ChatAttachment {
+  id            String   @id @default(cuid())
+  userId        String
+  channelId     String?
+  messageId     String?
+
+  // File info
+  filename      String
+  key           String   // R2 storage key
+  url           String   // Public or signed URL
+  thumbnailUrl  String?  // For images/videos
+  contentType   String
+  size          Int
+  category      String   // image, video, audio, document, archive
+
+  // Processing
+  status        String   @default("pending") // pending, uploaded, processing, ready, deleted
+  metadata      Json?    // Width, height, duration, etc.
+
+  // Timestamps
+  uploadedAt    DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel       ChatChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([channelId])
+  @@index([messageId])
+  @@index([status])
+}
+
+// E2E Encryption Keys for DMs
+model UserKeyBundle {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+
+  // Identity key (long-term)
+  identityPublicKey   String
+
+  // Signed prekey (medium-term, rotated periodically)
+  signedPrekeyId      Int
+  signedPrekeyPublic  String
+  signedPrekeySignature String
+
+  // One-time prekeys (consumed on use)
+  // Stored separately in UserOneTimePrekey
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oneTimePrekeys  UserOneTimePrekey[]
+}
+
+model UserOneTimePrekey {
+  id            String   @id @default(cuid())
+  keyBundleId   String
+  keyId         Int
+  publicKey     String
+  used          Boolean  @default(false)
+  usedAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  keyBundle     UserKeyBundle @relation(fields: [keyBundleId], references: [id], onDelete: Cascade)
+
+  @@unique([keyBundleId, keyId])
+  @@index([keyBundleId, used])
+}
+
+// Encrypted DM Sessions (Double Ratchet state)
+model EncryptedSession {
+  id              String   @id @default(cuid())
+
+  // Participants (sorted IDs for consistent lookup)
+  participantIds  String   // Comma-separated sorted user IDs
+
+  // Session state (encrypted, stored per-device)
+  userId          String   // Owner of this session state
+  deviceId        String
+
+  // Double Ratchet state (encrypted with device key)
+  rootKey         String   // Encrypted
+  chainKey        String   // Encrypted
+  messageNumber   Int      @default(0)
+
+  // Their ratchet public key
+  theirRatchetPublic String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([participantIds, userId, deviceId])
+  @@index([userId])
+}
+
+// Safety Numbers for verification
+model SafetyNumber {
+  id              String   @id @default(cuid())
+
+  // Users involved (sorted)
+  user1Id         String
+  user2Id         String
+
+  // Fingerprint (derived from identity keys)
+  fingerprint     String
+
+  // Verification status
+  verifiedByUser1 Boolean  @default(false)
+  verifiedByUser2 Boolean  @default(false)
+  verifiedAt      DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([user1Id, user2Id])
 }

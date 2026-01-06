@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { broadcastMessage, broadcastToUser } from "../stream/route";
+import {
+  isRedisConfigured,
+  setUserTyping,
+  clearUserTyping,
+  getTypingUsers,
+  publishTypingUpdate,
+} from "@/lib/redis";
 
 // Typing timeout - stop showing after 5 seconds of no updates
 const TYPING_TIMEOUT_MS = 5000;
@@ -22,6 +29,20 @@ export async function GET(request: NextRequest) {
     const channelId = searchParams.get("channelId");
     const dmUserId = searchParams.get("dmUserId");
 
+    // Use Redis if configured
+    if (isRedisConfigured()) {
+      const typingUsers = await getTypingUsers(channelId);
+      // Filter out current user
+      const filtered = typingUsers.filter((u) => u.userId !== session.user!.id);
+
+      return NextResponse.json({
+        success: true,
+        data: filtered,
+        source: "redis",
+      });
+    }
+
+    // Fallback to database
     const cutoffTime = new Date(Date.now() - TYPING_TIMEOUT_MS);
 
     const typingUsers = await prisma.typingIndicator.findMany({
@@ -41,6 +62,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: typingUsers,
+      source: "database",
     });
   } catch (error) {
     console.error("Error fetching typing indicators:", error);
@@ -72,8 +94,16 @@ export async function POST(request: NextRequest) {
       select: { name: true, image: true },
     });
 
+    const userName = user?.name || "Anonymous";
+
     if (isTyping) {
-      // Upsert typing indicator
+      // Use Redis if configured
+      if (isRedisConfigured()) {
+        await setUserTyping(session.user.id, userName, channelId);
+        await publishTypingUpdate(session.user.id, userName, channelId, true);
+      }
+
+      // Also update database (for fallback)
       await prisma.typingIndicator.upsert({
         where: {
           userId_channelId: {
@@ -85,21 +115,21 @@ export async function POST(request: NextRequest) {
           userId: session.user.id,
           channelId: channelId || null,
           dmUserId: dmUserId || null,
-          userName: user?.name || "Anonymous",
+          userName,
           userAvatar: user?.image,
           startedAt: new Date(),
         },
         update: {
           startedAt: new Date(),
         },
-      });
+      }).catch(() => {});
 
       // Broadcast typing start
       if (dmUserId) {
         broadcastToUser(dmUserId, {
           type: "typing_start",
           userId: session.user.id,
-          userName: user?.name || "Anonymous",
+          userName,
           userAvatar: user?.image,
           channelId,
           dmUserId,
@@ -108,19 +138,25 @@ export async function POST(request: NextRequest) {
         broadcastMessage({
           type: "typing_start",
           userId: session.user.id,
-          userName: user?.name || "Anonymous",
+          userName,
           userAvatar: user?.image,
           channelId,
         }, session.user.id);
       }
     } else {
-      // Remove typing indicator
+      // Use Redis if configured
+      if (isRedisConfigured()) {
+        await clearUserTyping(session.user.id, channelId);
+        await publishTypingUpdate(session.user.id, userName, channelId, false);
+      }
+
+      // Also update database
       await prisma.typingIndicator.deleteMany({
         where: {
           userId: session.user.id,
           channelId: channelId || null,
         },
-      });
+      }).catch(() => {});
 
       // Broadcast typing stop
       if (dmUserId) {
@@ -161,9 +197,15 @@ export async function DELETE() {
   }
 
   try {
+    // Clear from Redis if configured
+    if (isRedisConfigured()) {
+      await clearUserTyping(session.user.id, null);
+    }
+
+    // Also clear from database
     await prisma.typingIndicator.deleteMany({
       where: { userId: session.user.id },
-    });
+    }).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {

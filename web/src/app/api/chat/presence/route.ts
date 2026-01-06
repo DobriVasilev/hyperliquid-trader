@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { broadcastMessage } from "../stream/route";
+import {
+  isRedisConfigured,
+  setUserOnline,
+  setUserOffline,
+  getOnlineUsers,
+  cleanupStaleUsers,
+  publishPresenceUpdate,
+} from "@/lib/redis";
 
 // Presence timeout - consider user offline after 2 minutes of inactivity
 const PRESENCE_TIMEOUT_MS = 2 * 60 * 1000;
@@ -18,6 +26,22 @@ export async function GET() {
   }
 
   try {
+    // Use Redis if configured, otherwise fall back to database
+    if (isRedisConfigured()) {
+      // Clean up stale users in Redis
+      await cleanupStaleUsers();
+
+      // Get online users from Redis
+      const onlineUsers = await getOnlineUsers();
+
+      return NextResponse.json({
+        success: true,
+        data: onlineUsers,
+        source: "redis",
+      });
+    }
+
+    // Fallback to database
     const cutoffTime = new Date(Date.now() - PRESENCE_TIMEOUT_MS);
 
     // Get all users who were active recently
@@ -39,6 +63,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: onlineUsers,
+      source: "database",
     });
   } catch (error) {
     console.error("Error fetching presence:", error);
@@ -77,33 +102,80 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this is a new presence (user just came online)
+    const userData = {
+      userName: user.name || "Anonymous",
+      userAvatar: user.image || null,
+      status,
+    };
+
+    // Use Redis if configured
+    if (isRedisConfigured()) {
+      await setUserOnline(session.user.id, userData);
+      await publishPresenceUpdate(session.user.id, status, {
+        id: `presence-${session.user.id}`,
+        userId: session.user.id,
+        ...userData,
+      });
+
+      // Also update database for persistence (async, don't wait)
+      prisma.chatPresence.upsert({
+        where: { userId: session.user.id },
+        create: {
+          userId: session.user.id,
+          userName: userData.userName,
+          userAvatar: userData.userAvatar,
+          status,
+          lastSeen: new Date(),
+          isVip: false,
+        },
+        update: {
+          userName: userData.userName,
+          userAvatar: userData.userAvatar,
+          status,
+          lastSeen: new Date(),
+        },
+      }).catch(() => {});
+
+      // Broadcast to this server's clients
+      broadcastMessage({
+        type: "presence_update",
+        userId: session.user.id,
+        user: { id: `presence-${session.user.id}`, userId: session.user.id, ...userData },
+        status,
+      }, session.user.id);
+
+      return NextResponse.json({
+        success: true,
+        data: { userId: session.user.id, ...userData },
+        source: "redis",
+      });
+    }
+
+    // Fallback to database-only
     const existingPresence = await prisma.chatPresence.findUnique({
       where: { userId: session.user.id },
     });
     const wasOffline = !existingPresence ||
       new Date(existingPresence.lastSeen).getTime() < Date.now() - PRESENCE_TIMEOUT_MS;
 
-    // Upsert presence
     const presence = await prisma.chatPresence.upsert({
       where: { userId: session.user.id },
       create: {
         userId: session.user.id,
-        userName: user.name || "Anonymous",
-        userAvatar: user.image,
+        userName: userData.userName,
+        userAvatar: userData.userAvatar,
         status,
         lastSeen: new Date(),
-        isVip: false, // TODO: Implement VIP logic
+        isVip: false,
       },
       update: {
-        userName: user.name || "Anonymous",
-        userAvatar: user.image,
+        userName: userData.userName,
+        userAvatar: userData.userAvatar,
         status,
         lastSeen: new Date(),
       },
     });
 
-    // Broadcast presence update if user just came online
     if (wasOffline) {
       broadcastMessage({
         type: "presence_update",
@@ -116,6 +188,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: presence,
+      source: "database",
     });
   } catch (error) {
     console.error("Error updating presence:", error);
@@ -138,11 +211,25 @@ export async function DELETE() {
   }
 
   try {
+    // Use Redis if configured
+    if (isRedisConfigured()) {
+      await setUserOffline(session.user.id);
+      await publishPresenceUpdate(session.user.id, "offline");
+    }
+
+    // Also update database
     await prisma.chatPresence.delete({
       where: { userId: session.user.id },
     }).catch(() => {
       // Ignore if doesn't exist
     });
+
+    // Broadcast to this server's clients
+    broadcastMessage({
+      type: "presence_update",
+      userId: session.user.id,
+      status: "offline",
+    }, session.user.id);
 
     return NextResponse.json({
       success: true,
