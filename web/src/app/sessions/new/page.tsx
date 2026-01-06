@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { CandlestickChart, ChartCandle, ChartMarker } from "@/components/chart/CandlestickChart";
 import { TimeframeSelector } from "@/components/chart/TimeframeSelector";
 import { SymbolSelector } from "@/components/chart/SymbolSelector";
@@ -12,7 +10,6 @@ import { useCandles } from "@/hooks/useCandles";
 import { Timeframe, PatternType, PATTERN_CONFIGS } from "@/types/patterns";
 
 export default function NewSessionPage() {
-  const router = useRouter();
   const [symbol, setSymbol] = useState("BTC");
   const [timeframe, setTimeframe] = useState<Timeframe>("4h");
   const [patternType, setPatternType] = useState<PatternType>("swings");
@@ -66,45 +63,89 @@ export default function NewSessionPage() {
 
   // Create session and redirect
   const createSession = async () => {
-    if (candles.length === 0) return;
+    console.log("[Session Create] Starting...", {
+      candlesLength: candles.length,
+      symbol,
+      timeframe,
+      patternType
+    });
+
+    if (candles.length === 0) {
+      console.log("[Session Create] No candles, aborting");
+      alert("Please wait for candles to load before creating a session");
+      return;
+    }
 
     setIsSaving(true);
     try {
+      // Limit candles to reduce payload size (keep last 5000 max)
+      const maxCandles = 5000;
+      const candlesToSave = candles.length > maxCandles
+        ? candles.slice(-maxCandles)
+        : candles;
+
+      console.log("[Session Create] Preparing payload...", {
+        originalCount: candles.length,
+        savingCount: candlesToSave.length
+      });
+
+      const payload = {
+        name: sessionName || `${symbol} ${timeframe} - ${patternType}`,
+        symbol,
+        timeframe,
+        patternType,
+        patternSettings,
+        dateRange: {
+          start: dateRange.start.toISOString(),
+          end: dateRange.end.toISOString(),
+        },
+        candleData: { candles: candlesToSave },
+      };
+
+      const payloadStr = JSON.stringify(payload);
+      console.log("[Session Create] Payload size:", Math.round(payloadStr.length / 1024), "KB");
+
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: sessionName || `${symbol} ${timeframe} - ${patternType}`,
-          symbol,
-          timeframe,
-          patternType,
-          patternSettings,
-          dateRange: {
-            start: dateRange.start.toISOString(),
-            end: dateRange.end.toISOString(),
-          },
-          candleData: { candles },
-        }),
+        body: payloadStr,
       });
 
+      console.log("[Session Create] Response status:", response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Session Create] HTTP error:", response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Unknown error'}`);
+      }
+
       const data = await response.json();
+      console.log("[Session Create] Response data:", data);
 
       if (!data.success) {
         throw new Error(data.error || "Failed to create session");
       }
 
+      console.log("[Session Create] Running detection...");
       // Run detection on the new session
-      await fetch(`/api/sessions/${data.data.id}/detections`, {
+      const detectionRes = await fetch(`/api/sessions/${data.data.id}/detections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "run_detection" }),
       });
+      console.log("[Session Create] Detection response:", detectionRes.status);
 
       // Redirect to the new session
-      router.push(`/sessions/${data.data.id}`);
+      const sessionUrl = `/sessions/${data.data.id}`;
+      console.log("[Session Create] Redirecting to session:", sessionUrl);
+
+      // Use window.location for more reliable navigation
+      // router.push can sometimes fail silently in certain React states
+      window.location.href = sessionUrl;
     } catch (err) {
-      console.error("Error creating session:", err);
-      alert(err instanceof Error ? err.message : "Failed to create session");
+      console.error("[Session Create] Error:", err);
+      const message = err instanceof Error ? err.message : "Failed to create session";
+      alert(`Error creating session: ${message}`);
     } finally {
       setIsSaving(false);
     }
@@ -115,16 +156,30 @@ export default function NewSessionPage() {
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-[100] pointer-events-auto">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between relative">
-          <nav className="flex items-center gap-2 text-sm">
-            <Link href="/" className="font-semibold text-white hover:opacity-80 transition-opacity">
+          <nav className="flex items-center gap-2 text-sm relative z-[101]">
+            <a
+              href="/"
+              className="font-semibold text-white hover:opacity-80 transition-opacity cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.href = "/";
+              }}
+            >
               Systems Trader
-            </Link>
+            </a>
             <span className="text-gray-600">/</span>
-            <Link href="/sessions" className="text-gray-400 hover:text-gray-200 transition-colors">
+            <a
+              href="/sessions"
+              className="text-gray-400 hover:text-gray-200 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.href = "/sessions";
+              }}
+            >
               Sessions
-            </Link>
+            </a>
             <span className="text-gray-600">/</span>
             <span className="text-gray-500">New Session</span>
           </nav>
