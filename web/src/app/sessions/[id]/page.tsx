@@ -578,6 +578,7 @@ export default function SessionDetailPage({
                 onChartClick={handleChartClick}
                 onMarkerDrag={handleMarkerDrag}
                 onMarkerContextMenu={handleMarkerContextMenu}
+                sessionId={id}
                 height={600}
               />
               {/* Cursor overlay for collaborative editing */}

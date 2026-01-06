@@ -9,6 +9,7 @@ import {
   Time,
   SeriesMarker,
   ColorType,
+  CrosshairMode,
 } from "lightweight-charts";
 
 export interface ChartCandle {
@@ -37,6 +38,7 @@ interface CandlestickChartProps {
   onChartClick?: (time: number, price: number) => void;
   onMarkerDrag?: (marker: ChartMarker, newTime: number, newPrice: number) => void;
   onMarkerContextMenu?: (marker: ChartMarker, x: number, y: number) => void;
+  sessionId?: string; // For saving/restoring chart position
   height?: number;
   className?: string;
 }
@@ -49,12 +51,18 @@ export function CandlestickChart({
   onChartClick,
   onMarkerDrag,
   onMarkerContextMenu,
+  sessionId,
   height = 500,
   className = "",
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const initialLoadDoneRef = useRef(false);
+
+  // Modifier key state (Cmd/Ctrl for magnet mode)
+  const isModifierHeldRef = useRef(false);
+  const [isModifierHeld, setIsModifierHeld] = useState(false);
 
   // Snap indicator state
   const [snapIndicator, setSnapIndicator] = useState<{
@@ -63,11 +71,47 @@ export function CandlestickChart({
     level: string;
     color: string;
   } | null>(null);
-  const [isModifierHeld, setIsModifierHeld] = useState(false);
 
   // Drag state
   const [draggingMarker, setDraggingMarker] = useState<ChartMarker | null>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const isDraggingRef = useRef(false);
+
+  // Save chart position to localStorage
+  const saveChartPosition = useCallback(() => {
+    if (!chartRef.current || !sessionId) return;
+
+    const timeScale = chartRef.current.timeScale();
+    const visibleRange = timeScale.getVisibleRange();
+    if (visibleRange) {
+      const key = `chart-position-${sessionId}`;
+      localStorage.setItem(key, JSON.stringify({
+        from: visibleRange.from,
+        to: visibleRange.to,
+      }));
+    }
+  }, [sessionId]);
+
+  // Restore chart position from localStorage
+  const restoreChartPosition = useCallback(() => {
+    if (!chartRef.current || !sessionId) return false;
+
+    const key = `chart-position-${sessionId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const { from, to } = JSON.parse(saved);
+        chartRef.current.timeScale().setVisibleRange({
+          from: from as Time,
+          to: to as Time,
+        });
+        return true;
+      } catch (e) {
+        console.error("Failed to restore chart position:", e);
+      }
+    }
+    return false;
+  }, [sessionId]);
 
   // Initialize chart
   useEffect(() => {
@@ -83,7 +127,7 @@ export function CandlestickChart({
         horzLines: { color: "#1a1a2e" },
       },
       crosshair: {
-        mode: 0, // Normal (free cursor movement)
+        mode: CrosshairMode.Normal,
         vertLine: {
           color: "#4a4a6a",
           width: 1,
@@ -123,7 +167,6 @@ export function CandlestickChart({
       },
     });
 
-    // v4 API - addCandlestickSeries
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#26a69a",
       downColor: "#ef5350",
@@ -145,16 +188,24 @@ export function CandlestickChart({
       }
     };
 
+    // Save position before unload
+    const handleBeforeUnload = () => {
+      saveChartPosition();
+    };
+
     window.addEventListener("resize", handleResize);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     handleResize();
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      saveChartPosition(); // Save on unmount too
       chart.remove();
     };
-  }, []);
+  }, [saveChartPosition]);
 
-  // Update candle data
+  // Update candle data - only fitContent on FIRST load
   useEffect(() => {
     if (!candleSeriesRef.current || candles.length === 0) return;
 
@@ -167,10 +218,19 @@ export function CandlestickChart({
     }));
 
     candleSeriesRef.current.setData(chartData);
-    chartRef.current?.timeScale().fitContent();
-  }, [candles]);
 
-  // Update markers
+    // Only fit content on initial load, and try to restore saved position
+    if (!initialLoadDoneRef.current) {
+      initialLoadDoneRef.current = true;
+      // Try to restore saved position, otherwise fit content
+      const restored = restoreChartPosition();
+      if (!restored) {
+        chartRef.current?.timeScale().fitContent();
+      }
+    }
+  }, [candles, restoreChartPosition]);
+
+  // Update markers (without resetting view)
   useEffect(() => {
     if (!candleSeriesRef.current) return;
 
@@ -183,57 +243,66 @@ export function CandlestickChart({
       size: m.size || 1,
     }));
 
-    // Sort markers by time
     seriesMarkers.sort((a, b) => (a.time as number) - (b.time as number));
-
     candleSeriesRef.current.setMarkers(seriesMarkers);
   }, [markers]);
 
-  // Track modifier key (Cmd/Ctrl) for snap mode
+  // Track modifier key (Cmd/Ctrl) for snap mode - use global listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
+        isModifierHeldRef.current = true;
         setIsModifierHeld(true);
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (!e.metaKey && !e.ctrlKey) {
+      // Check if modifier is released
+      if (e.key === "Meta" || e.key === "Control") {
+        isModifierHeldRef.current = false;
         setIsModifierHeld(false);
         setSnapIndicator(null);
       }
     };
 
+    // Also handle blur (when user switches windows)
+    const handleBlur = () => {
+      isModifierHeldRef.current = false;
+      setIsModifierHeld(false);
+      setSnapIndicator(null);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
     };
   }, []);
 
-  // Handle crosshair move for snap indicator
+  // Handle crosshair move for snap indicator - always subscribed
   useEffect(() => {
     if (!chartRef.current || !candleSeriesRef.current) return;
 
     const chart = chartRef.current;
     const series = candleSeriesRef.current;
 
-    const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number }; seriesData?: Map<unknown, unknown> }) => {
-      if (!isModifierHeld || !param.time || !param.point) {
+    const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number } }) => {
+      // Check ref for immediate update
+      if (!isModifierHeldRef.current || !param.time || !param.point) {
         setSnapIndicator(null);
         return;
       }
 
-      // Find the candle at this time
       const candle = candles.find((c) => c.time === param.time);
       if (!candle) {
         setSnapIndicator(null);
         return;
       }
 
-      // Get mouse Y coordinate and find closest price level
       const y = param.point.y;
       const hoveredPrice = series.coordinateToPrice(y);
       if (hoveredPrice === null || hoveredPrice === undefined) {
@@ -268,7 +337,7 @@ export function CandlestickChart({
     return () => {
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
     };
-  }, [candles, isModifierHeld]);
+  }, [candles]); // Only depend on candles, not isModifierHeld
 
   // Find marker at position
   const findMarkerAtPosition = useCallback((x: number, y: number): ChartMarker | null => {
@@ -280,14 +349,11 @@ export function CandlestickChart({
       const markerX = timeScale.timeToCoordinate(marker.time as Time);
       if (markerX === null) continue;
 
-      // X must be close (within 20px)
-      if (Math.abs(markerX - x) > 20) continue;
+      if (Math.abs(markerX - x) > 25) continue;
 
-      // Get the marker's candle to check vertical position
       const markerCandle = candles.find(c => c.time === marker.time);
       if (!markerCandle) continue;
 
-      // Calculate marker's Y coordinate based on position
       let markerPrice: number;
       if (marker.position === "aboveBar") {
         markerPrice = markerCandle.high;
@@ -300,8 +366,8 @@ export function CandlestickChart({
       const markerY = candleSeriesRef.current.priceToCoordinate(markerPrice);
       if (markerY === null || markerY === undefined) continue;
 
-      // Y must also be close (within 30px for marker area)
-      if (Math.abs(markerY - y) < 30) {
+      // Larger hitbox for markers (40px vertical area)
+      if (Math.abs(markerY - y) < 40) {
         return marker;
       }
     }
@@ -309,9 +375,10 @@ export function CandlestickChart({
     return null;
   }, [candles, markers]);
 
-  // Handle mouse down for drag start
+  // Handle mouse down - for drag initiation
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current || !onMarkerDrag) return;
+    if (event.button !== 0) return; // Only left click
 
     const rect = containerRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left;
@@ -319,16 +386,28 @@ export function CandlestickChart({
 
     const marker = findMarkerAtPosition(x, y);
     if (marker) {
+      // Start drag mode
       event.preventDefault();
+      event.stopPropagation();
+      isDraggingRef.current = true;
       setDraggingMarker(marker);
       setDragPosition({ x, y });
+
+      // Disable chart interaction while dragging
+      if (chartRef.current) {
+        chartRef.current.applyOptions({
+          handleScroll: false,
+          handleScale: false,
+        });
+      }
     }
   }, [findMarkerAtPosition, onMarkerDrag]);
 
-  // Handle mouse move for dragging
+  // Handle mouse move
   const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!draggingMarker || !containerRef.current) return;
+    if (!isDraggingRef.current || !draggingMarker || !containerRef.current) return;
 
+    event.preventDefault();
     const rect = containerRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -336,9 +415,27 @@ export function CandlestickChart({
     setDragPosition({ x, y });
   }, [draggingMarker]);
 
-  // Handle mouse up for drag end
+  // Handle mouse up - complete drag
   const handleMouseUp = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!draggingMarker || !dragPosition || !chartRef.current || !candleSeriesRef.current || !onMarkerDrag) {
+    // Re-enable chart interaction
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+          horzTouchDrag: true,
+          vertTouchDrag: true,
+        },
+        handleScale: {
+          axisPressedMouseMove: true,
+          mouseWheel: true,
+          pinch: true,
+        },
+      });
+    }
+
+    if (!isDraggingRef.current || !draggingMarker || !dragPosition || !chartRef.current || !candleSeriesRef.current || !onMarkerDrag) {
+      isDraggingRef.current = false;
       setDraggingMarker(null);
       setDragPosition(null);
       return;
@@ -350,15 +447,15 @@ export function CandlestickChart({
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    // Get new time and price
     const timeScale = chartRef.current.timeScale();
     const newTime = timeScale.coordinateToTime(x);
-    let newPrice = candleSeriesRef.current.coordinateToPrice(y);
+    const newPrice = candleSeriesRef.current.coordinateToPrice(y);
 
     if (newTime !== null && newPrice !== null) {
-      // Snap to candle level if modifier held
       let finalPrice = newPrice as number;
-      if (isModifierHeld) {
+
+      // Snap to candle level if modifier held
+      if (isModifierHeldRef.current) {
         const candle = candles.find(c => c.time === newTime);
         if (candle) {
           const priceLevels = [candle.high, candle.low, candle.open, candle.close];
@@ -368,12 +465,17 @@ export function CandlestickChart({
         }
       }
 
-      onMarkerDrag(draggingMarker, newTime as number, finalPrice);
+      // Only trigger drag if moved significantly
+      const startMarkerX = timeScale.timeToCoordinate(draggingMarker.time as Time);
+      if (startMarkerX !== null && (Math.abs(x - startMarkerX) > 5 || Math.abs(y - (dragPosition?.y || y)) > 5)) {
+        onMarkerDrag(draggingMarker, newTime as number, finalPrice);
+      }
     }
 
+    isDraggingRef.current = false;
     setDraggingMarker(null);
     setDragPosition(null);
-  }, [draggingMarker, dragPosition, candles, isModifierHeld, onMarkerDrag]);
+  }, [draggingMarker, dragPosition, candles, onMarkerDrag]);
 
   // Handle context menu (right-click)
   const handleContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -386,6 +488,7 @@ export function CandlestickChart({
     const marker = findMarkerAtPosition(x, y);
     if (marker) {
       event.preventDefault();
+      event.stopPropagation();
       onMarkerContextMenu(marker, event.clientX, event.clientY);
     }
   }, [findMarkerAtPosition, onMarkerContextMenu]);
@@ -393,8 +496,8 @@ export function CandlestickChart({
   // Handle click events
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      // Don't handle click if we just finished dragging
-      if (draggingMarker) return;
+      // Don't handle click if we were dragging
+      if (isDraggingRef.current) return;
 
       if (!chartRef.current || !candleSeriesRef.current) return;
 
@@ -405,17 +508,15 @@ export function CandlestickChart({
       const y = event.clientY - rect.top;
       const shouldSnap = event.metaKey || event.ctrlKey;
 
-      // Get time and price from coordinates
       const timeScale = chartRef.current.timeScale();
       const time = timeScale.coordinateToTime(x);
       const clickedPrice = candleSeriesRef.current.coordinateToPrice(y);
 
       if (time !== null && clickedPrice !== null) {
-        // Find the candle at this time first
         const candleIndex = candles.findIndex((c) => c.time === time);
         const candle = candleIndex !== -1 ? candles[candleIndex] : null;
 
-        // Check if clicked on a marker
+        // Check if clicked on a marker (for left-click modal)
         const clickedMarker = findMarkerAtPosition(x, y);
 
         if (clickedMarker && onMarkerClick) {
@@ -423,13 +524,12 @@ export function CandlestickChart({
           return;
         }
 
-        // For candle clicks
+        // For candle clicks (adding new detection)
         if (candle && onCandleClick) {
           const clickedPriceNum = clickedPrice as number;
           let finalPrice = clickedPriceNum;
           let snappedLevel = "free";
 
-          // Only snap to price levels if Cmd/Ctrl is held
           if (shouldSnap) {
             const priceLevels = [
               { price: candle.high, name: "high" },
@@ -448,7 +548,6 @@ export function CandlestickChart({
             snappedLevel = closestLevel.name;
           }
 
-          // Create modified candle with price info
           const snappedCandle = {
             ...candle,
             _snappedPrice: finalPrice,
@@ -459,11 +558,10 @@ export function CandlestickChart({
           return;
         }
 
-        // General chart click
+        // General chart click (for move mode placement)
         if (onChartClick) {
           let finalPrice = clickedPrice as number;
 
-          // Only snap if Cmd/Ctrl is held and we're on a candle
           if (shouldSnap && candle) {
             const priceLevels = [candle.high, candle.low, candle.open, candle.close];
             finalPrice = priceLevels.reduce((closest, level) =>
@@ -475,8 +573,38 @@ export function CandlestickChart({
         }
       }
     },
-    [candles, draggingMarker, findMarkerAtPosition, onCandleClick, onMarkerClick, onChartClick]
+    [candles, findMarkerAtPosition, onCandleClick, onMarkerClick, onChartClick]
   );
+
+  // Global mouse up handler (in case mouse leaves the chart while dragging)
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (isDraggingRef.current) {
+        // Re-enable chart interaction
+        if (chartRef.current) {
+          chartRef.current.applyOptions({
+            handleScroll: {
+              mouseWheel: true,
+              pressedMouseMove: true,
+              horzTouchDrag: true,
+              vertTouchDrag: true,
+            },
+            handleScale: {
+              axisPressedMouseMove: true,
+              mouseWheel: true,
+              pinch: true,
+            },
+          });
+        }
+        isDraggingRef.current = false;
+        setDraggingMarker(null);
+        setDragPosition(null);
+      }
+    };
+
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  }, []);
 
   return (
     <div className="relative">
@@ -488,42 +616,37 @@ export function CandlestickChart({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
-          if (draggingMarker) {
-            setDraggingMarker(null);
-            setDragPosition(null);
-          }
-        }}
         onContextMenu={handleContextMenu}
       />
 
-      {/* Snap indicator overlay */}
+      {/* Snap/Magnet indicator overlay */}
       {snapIndicator && isModifierHeld && (
         <>
           {/* Horizontal line at snap level */}
           <div
-            className="absolute left-0 right-16 pointer-events-none"
+            className="absolute left-0 right-16 pointer-events-none z-50"
             style={{
               top: snapIndicator.y,
               height: 2,
               backgroundColor: snapIndicator.color,
               opacity: 0.9,
-              boxShadow: `0 0 8px ${snapIndicator.color}`,
+              boxShadow: `0 0 10px ${snapIndicator.color}, 0 0 20px ${snapIndicator.color}`,
             }}
           />
           {/* Snap level label */}
           <div
-            className="absolute right-16 pointer-events-none px-2 py-1 text-xs font-mono font-bold rounded shadow-lg"
+            className="absolute right-16 pointer-events-none px-3 py-1.5 text-xs font-mono font-bold rounded shadow-lg z-50"
             style={{
-              top: snapIndicator.y - 12,
+              top: snapIndicator.y - 14,
               backgroundColor: snapIndicator.color,
               color: snapIndicator.color === "#ffffff" ? "#000" : "#fff",
+              boxShadow: `0 0 10px ${snapIndicator.color}`,
             }}
           >
             {snapIndicator.level} ${snapIndicator.price.toFixed(2)}
           </div>
-          {/* Snap mode indicator */}
-          <div className="absolute top-2 left-2 px-2 py-1 bg-blue-600 rounded text-xs text-white font-medium pointer-events-none shadow-lg">
+          {/* Magnet mode indicator */}
+          <div className="absolute top-3 left-3 px-3 py-1.5 bg-blue-600 rounded text-sm text-white font-bold pointer-events-none shadow-lg z-50 animate-pulse">
             MAGNET MODE
           </div>
         </>
@@ -532,16 +655,17 @@ export function CandlestickChart({
       {/* Drag indicator */}
       {draggingMarker && dragPosition && (
         <div
-          className="absolute pointer-events-none"
+          className="absolute pointer-events-none z-50"
           style={{
-            left: dragPosition.x - 10,
-            top: dragPosition.y - 10,
-            width: 20,
-            height: 20,
+            left: dragPosition.x - 12,
+            top: dragPosition.y - 12,
+            width: 24,
+            height: 24,
             backgroundColor: draggingMarker.color,
             borderRadius: "50%",
-            opacity: 0.8,
-            boxShadow: `0 0 10px ${draggingMarker.color}`,
+            opacity: 0.9,
+            border: "2px solid white",
+            boxShadow: `0 0 15px ${draggingMarker.color}`,
           }}
         />
       )}
