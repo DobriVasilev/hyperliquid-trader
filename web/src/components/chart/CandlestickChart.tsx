@@ -388,7 +388,10 @@ export function CandlestickChart({
     if (!chartRef.current || !candleSeriesRef.current) return null;
 
     // Don't detect markers in scale areas
-    if (!isInChartArea(x, y)) return null;
+    if (!isInChartArea(x, y)) {
+      console.log('[Chart] Click in scale area, ignoring marker detection', { x, y });
+      return null;
+    }
 
     const timeScale = chartRef.current.timeScale();
 
@@ -434,6 +437,7 @@ export function CandlestickChart({
     const marker = findMarkerAtPosition(x, y);
     if (marker) {
       // Start drag mode
+      console.log('[Chart] Drag started', { markerId: marker.id, x, y });
       event.preventDefault();
       event.stopPropagation();
       isDraggingRef.current = true;
@@ -536,9 +540,26 @@ export function CandlestickChart({
 
       // Only trigger drag if moved significantly
       const startMarkerX = timeScale.timeToCoordinate(draggingMarker.time as Time);
-      if (startMarkerX !== null && (Math.abs(x - startMarkerX) > 5 || Math.abs(y - (dragPosition?.y || y)) > 5)) {
+      const movedEnough = startMarkerX !== null && (Math.abs(x - startMarkerX) > 5 || Math.abs(y - (dragPosition?.y || y)) > 5);
+
+      console.log('[Chart] Drag completed', {
+        markerId: draggingMarker.id,
+        newTime,
+        finalPrice,
+        movedEnough,
+        startX: startMarkerX,
+        endX: x,
+        deltaX: startMarkerX ? Math.abs(x - startMarkerX) : 'N/A'
+      });
+
+      if (movedEnough) {
+        console.log('[Chart] Calling onMarkerDrag');
         onMarkerDrag(draggingMarker, newTime as number, finalPrice);
+      } else {
+        console.log('[Chart] Not moved enough, skipping onMarkerDrag');
       }
+    } else {
+      console.log('[Chart] Drag ended but invalid position', { newTime, newPrice });
     }
 
     // Notify parent drag ended
@@ -592,12 +613,14 @@ export function CandlestickChart({
         const clickedMarker = findMarkerAtPosition(x, y);
 
         if (clickedMarker && onMarkerClick) {
+          console.log('[Chart] Marker clicked', { markerId: clickedMarker.id });
           onMarkerClick(clickedMarker);
           return;
         }
 
         // For candle clicks (adding new detection)
         if (candle && onCandleClick) {
+          console.log('[Chart] Candle clicked', { time, candleIndex, price: clickedPrice });
           const clickedPriceNum = clickedPrice as number;
           let finalPrice = clickedPriceNum;
           let snappedLevel = "free";

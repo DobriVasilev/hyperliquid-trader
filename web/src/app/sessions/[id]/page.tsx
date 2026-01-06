@@ -214,8 +214,17 @@ export default function SessionDetailPage({
     // Use snapped price if available (from click detection), otherwise fall back to close
     const snappedPrice = (candle as { _snappedPrice?: number })._snappedPrice ?? candle.close;
 
+    console.log('[Session] handleCandleClick', {
+      time: candle.time,
+      index,
+      snappedPrice,
+      movingDetection: movingDetection?.id,
+      activeTool
+    });
+
     // If in move mode, handle as chart click to place the moving detection
     if (movingDetection) {
+      console.log('[Session] In move mode, placing detection');
       setMoveTargetData({ time: candle.time, price: snappedPrice, candleIndex: index });
       setSelectedDetection(movingDetection);
       setCorrectionMode("move");
@@ -224,7 +233,10 @@ export default function SessionDetailPage({
     }
 
     // Only trigger if a drawing tool is selected (not "select" mode)
-    if (activeTool === "select") return;
+    if (activeTool === "select") {
+      console.log('[Session] activeTool is select, ignoring');
+      return;
+    }
 
     setAddData({ time: candle.time, price: snappedPrice, candleIndex: index });
     setAutoDetectionType(activeTool); // Pass the tool type to the modal
@@ -308,12 +320,22 @@ export default function SessionDetailPage({
 
   // Handle drag-and-drop for markers
   const handleMarkerDrag = useCallback(async (marker: ChartMarker, newTime: number, newPrice: number) => {
+    console.log('[Session] handleMarkerDrag called', { markerId: marker.id, newTime, newPrice });
+
     const detection = session?.detections.find((d) => d.id === marker.id);
-    if (!detection) return;
+    if (!detection) {
+      console.log('[Session] Detection not found for marker', marker.id);
+      return;
+    }
 
     // Find the candle index for the new position
     const candleIndex = candles.findIndex((c) => c.time === newTime);
-    if (candleIndex === -1) return;
+    if (candleIndex === -1) {
+      console.log('[Session] Candle not found for time', newTime);
+      return;
+    }
+
+    console.log('[Session] Submitting move correction', { candleIndex, newPrice });
 
     // Mark that API call is in progress (so handleMarkerDragEnd doesn't clear draggingMarkerId)
     dragApiCallInProgressRef.current = true;
@@ -335,10 +357,12 @@ export default function SessionDetailPage({
       };
 
       await handleCorrectionSubmit(correctionData);
+      console.log('[Session] Move correction submitted successfully');
     } catch (err) {
-      console.error("Error moving detection:", err);
+      console.error("[Session] Error moving detection:", err);
     } finally {
       // Clear dragging state after API call completes (or fails)
+      console.log('[Session] Clearing drag state');
       dragApiCallInProgressRef.current = false;
       setDraggingMarkerId(null);
     }
@@ -350,8 +374,11 @@ export default function SessionDetailPage({
   }, []);
 
   const openCorrectionModal = (mode: "delete" | "move" | "add" | "confirm", detection?: PatternDetection) => {
+    console.log('[Session] openCorrectionModal', { mode, detectionId: detection?.id });
+
     // Move mode: don't open modal yet - wait for user to click new position
     if (mode === "move" && detection) {
+      console.log('[Session] Entering move mode for detection', detection.id);
       setMovingDetection(detection);
       setMoveTargetData(null);
       return;
