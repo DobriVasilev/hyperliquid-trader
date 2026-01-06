@@ -424,13 +424,14 @@ export default function SessionDetailPage({
     }
   }, []);
 
-  // Handle drag-and-drop for markers
-  const handleMarkerDrag = useCallback(async (marker: ChartMarker, newTime: number, newPrice: number) => {
+  // Handle drag-and-drop for markers - opens modal for confirmation/comment
+  const handleMarkerDrag = useCallback((marker: ChartMarker, newTime: number, newPrice: number) => {
     console.log('[Session] handleMarkerDrag called', { markerId: marker.id, newTime, newPrice });
 
     const detection = session?.detections.find((d) => d.id === marker.id);
     if (!detection) {
       console.log('[Session] Detection not found for marker', marker.id);
+      setDraggingMarkerId(null);
       return;
     }
 
@@ -438,40 +439,20 @@ export default function SessionDetailPage({
     const candleIndex = candles.findIndex((c) => c.time === newTime);
     if (candleIndex === -1) {
       console.log('[Session] Candle not found for time', newTime);
+      setDraggingMarkerId(null);
       return;
     }
 
-    console.log('[Session] Submitting move correction', { candleIndex, newPrice });
+    console.log('[Session] Opening move modal for drag', { candleIndex, newPrice });
 
-    // Mark that API call is in progress (so handleMarkerDragEnd doesn't clear draggingMarkerId)
-    dragApiCallInProgressRef.current = true;
+    // Clear dragging state
+    setDraggingMarkerId(null);
 
-    // Submit the move correction directly (without modal for drag)
-    try {
-      const correctionData: CorrectionData = {
-        correctionType: "move",
-        reason: "Dragged to new position",
-        detectionId: detection.id,
-        originalIndex: detection.candleIndex,
-        originalTime: new Date(detection.candleTime).getTime(),
-        originalPrice: detection.price,
-        originalType: detection.detectionType,
-        correctedIndex: candleIndex,
-        correctedTime: newTime * 1000,
-        correctedPrice: newPrice,
-        correctedType: detection.detectionType,
-      };
-
-      await handleCorrectionSubmit(correctionData);
-      console.log('[Session] Move correction submitted successfully');
-    } catch (err) {
-      console.error("[Session] Error moving detection:", err);
-    } finally {
-      // Clear dragging state after API call completes (or fails)
-      console.log('[Session] Clearing drag state');
-      dragApiCallInProgressRef.current = false;
-      setDraggingMarkerId(null);
-    }
+    // Open modal with move data pre-filled (user can add comment)
+    setSelectedDetection(detection);
+    setMoveTargetData({ time: newTime, price: newPrice, candleIndex });
+    setCorrectionMode("move");
+    setCorrectionModalOpen(true);
   }, [session?.detections, candles]);
 
   // Handle right-click context menu on markers
