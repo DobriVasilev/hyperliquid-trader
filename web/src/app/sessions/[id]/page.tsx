@@ -570,6 +570,17 @@ export default function SessionDetailPage({
     }
   };
 
+  // Handle navigation to detection from comment
+  const handleNavigateToDetection = useCallback((detectionId: string) => {
+    const detection = session?.detections.find((d) => d.id === detectionId);
+    if (detection) {
+      // Open the modal in options mode to show the detection
+      setSelectedDetection(detection);
+      setCorrectionMode("options");
+      setCorrectionModalOpen(true);
+    }
+  }, [session?.detections]);
+
   if (sessionError) {
     return (
       <main className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center">
@@ -797,6 +808,7 @@ export default function SessionDetailPage({
                       onReply={handleReplyComment}
                       onResolve={handleResolveComment}
                       onDelete={handleDeleteComment}
+                      onNavigateToDetection={handleNavigateToDetection}
                       currentUserId={authSession?.user?.id}
                     />
                   ))}

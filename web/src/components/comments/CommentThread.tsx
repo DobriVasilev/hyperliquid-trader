@@ -9,6 +9,7 @@ interface CommentThreadProps {
   onReply: (content: string, parentId: string) => Promise<void>;
   onResolve: (commentId: string, resolved: boolean) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
+  onNavigateToDetection?: (detectionId: string) => void;
   currentUserId?: string;
 }
 
@@ -36,6 +37,7 @@ export function CommentThread({
   onReply,
   onResolve,
   onDelete,
+  onNavigateToDetection,
   currentUserId,
 }: CommentThreadProps) {
   const [showReplyInput, setShowReplyInput] = useState(false);
@@ -79,6 +81,19 @@ export function CommentThread({
             <span className="text-xs text-gray-500">
               {formatDate(comment.createdAt)}
             </span>
+            {comment.detectionId && onNavigateToDetection && (
+              <button
+                onClick={() => onNavigateToDetection(comment.detectionId!)}
+                className="text-xs px-1.5 py-0.5 bg-blue-900/50 text-blue-300 rounded hover:bg-blue-800/50 transition-colors flex items-center gap-1"
+                title="Go to detection on chart"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Go to
+              </button>
+            )}
             {comment.resolved && (
               <span className="text-xs px-1.5 py-0.5 bg-green-900 text-green-300 rounded">
                 resolved
