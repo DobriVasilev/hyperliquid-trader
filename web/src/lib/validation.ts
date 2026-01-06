@@ -1,10 +1,18 @@
 import { z } from "zod";
 
+// All supported timeframes
+const VALID_TIMEFRAMES = [
+  "1s", "5s", "15s", "30s",
+  "1m", "3m", "5m", "15m", "30m", "45m",
+  "1h", "2h", "3h", "4h", "6h", "8h", "12h",
+  "1d", "3d", "1w", "1M"
+] as const;
+
 // Session schemas
 export const createSessionSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   symbol: z.string().min(1).max(20),
-  timeframe: z.enum(["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]),
+  timeframe: z.enum(VALID_TIMEFRAMES),
   patternType: z.string().min(1).max(50),
   patternSettings: z.record(z.string(), z.unknown()).optional(), // Pattern-specific settings
   candleData: z.record(z.string(), z.unknown()).optional(),
@@ -92,7 +100,7 @@ export const fileUploadSchema = z.object({
 // Candles API schema
 export const candlesQuerySchema = z.object({
   symbol: z.string().min(1).max(20).default("BTC"),
-  interval: z.enum(["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]).default("4h"),
+  interval: z.enum(VALID_TIMEFRAMES).default("4h"),
   days: z.coerce.number().int().min(1).max(365).default(30),
 });
 
