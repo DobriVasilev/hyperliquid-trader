@@ -13,6 +13,7 @@ import { CorrectionModal, CorrectionData } from "@/components/corrections";
 import { CommentInput, CommentThread, ThreadViewModal, VoteButtons, RichTextEditor } from "@/components/comments";
 import { OnlineUsers, CursorOverlay } from "@/components/realtime";
 import { DetectionList } from "@/components/detections/DetectionList";
+import { WhyNoDetectionModal } from "@/components/detections/WhyNoDetectionModal";
 import { ShareModal } from "@/components/sharing/ShareModal";
 import { usePermalinks } from "@/hooks/usePermalinks";
 
@@ -169,11 +170,24 @@ export default function SessionDetailPage({
   // Magnet mode - snaps to candle levels (high/low/open/close)
   const [magnetMode, setMagnetMode] = useState(false);
 
-  // Context menu state
+  // Context menu state (for markers)
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     marker: ChartMarker;
+  } | null>(null);
+
+  // Candle context menu state (for "Why no detection?" feature)
+  const [candleContextMenu, setCandleContextMenu] = useState<{
+    x: number;
+    y: number;
+    candle: ChartCandle;
+    index: number;
+  } | null>(null);
+
+  // "Why no detection?" modal state
+  const [whyNoDetectionModal, setWhyNoDetectionModal] = useState<{
+    candleIndex: number;
   } | null>(null);
 
   // Undo the last correction (optimistic update for instant feel)
@@ -524,6 +538,11 @@ export default function SessionDetailPage({
   // Handle right-click context menu on markers
   const handleMarkerContextMenu = useCallback((marker: ChartMarker, x: number, y: number) => {
     setContextMenu({ x, y, marker });
+  }, []);
+
+  // Handle right-click context menu on candles (for "Why no detection?" feature)
+  const handleCandleContextMenu = useCallback((candle: ChartCandle, index: number, x: number, y: number) => {
+    setCandleContextMenu({ x, y, candle, index });
   }, []);
 
   const openCorrectionModal = (mode: "delete" | "move" | "add" | "confirm" | "unconfirm", detection?: PatternDetection) => {
@@ -938,6 +957,7 @@ export default function SessionDetailPage({
                 onMarkerDrag={handleMarkerDrag}
                 onMarkerDragEnd={handleMarkerDragEnd}
                 onMarkerContextMenu={handleMarkerContextMenu}
+                onCandleContextMenu={handleCandleContextMenu}
                 onNavigationComplete={handleNavigationComplete}
                 sessionId={id}
                 height={600}
@@ -1387,6 +1407,92 @@ export default function SessionDetailPage({
           />
         );
       })()}
+
+      {/* Candle right-click context menu (for "Why no detection?") */}
+      {candleContextMenu && (
+        <ContextMenu
+          x={candleContextMenu.x}
+          y={candleContextMenu.y}
+          items={[
+            {
+              label: "Why No Detection?",
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ),
+              onClick: () => {
+                setWhyNoDetectionModal({ candleIndex: candleContextMenu.index });
+                setCandleContextMenu(null);
+              },
+            },
+            {
+              label: `Add Swing High`,
+              variant: "default" as const,
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              ),
+              onClick: () => {
+                setAutoDetectionType("swing_high");
+                setActiveTool("swing_high");
+                setAddData({
+                  time: candleContextMenu.candle.time,
+                  price: candleContextMenu.candle.high,
+                  candleIndex: candleContextMenu.index,
+                });
+                setCorrectionMode("add");
+                setCorrectionModalOpen(true);
+                setCandleContextMenu(null);
+              },
+            },
+            {
+              label: `Add Swing Low`,
+              variant: "default" as const,
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              ),
+              onClick: () => {
+                setAutoDetectionType("swing_low");
+                setActiveTool("swing_low");
+                setAddData({
+                  time: candleContextMenu.candle.time,
+                  price: candleContextMenu.candle.low,
+                  candleIndex: candleContextMenu.index,
+                });
+                setCorrectionMode("add");
+                setCorrectionModalOpen(true);
+                setCandleContextMenu(null);
+              },
+            },
+            {
+              label: `Candle #${candleContextMenu.index}`,
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ),
+              onClick: () => {
+                navigator.clipboard.writeText(`Candle #${candleContextMenu.index} - Time: ${new Date(candleContextMenu.candle.time * 1000).toISOString()}`);
+                setCandleContextMenu(null);
+              },
+            },
+          ]}
+          onClose={() => setCandleContextMenu(null)}
+        />
+      )}
+
+      {/* Why No Detection Modal */}
+      <WhyNoDetectionModal
+        isOpen={!!whyNoDetectionModal}
+        onClose={() => setWhyNoDetectionModal(null)}
+        sessionId={id}
+        candleIndex={whyNoDetectionModal?.candleIndex ?? 0}
+        mode={(session?.patternSettings?.detection_mode as "wicks" | "closes") || "wicks"}
+      />
 
       {/* Share Modal */}
       {session && (

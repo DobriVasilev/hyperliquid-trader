@@ -46,6 +46,7 @@ interface CandlestickChartProps {
   onMarkerDrag?: (marker: ChartMarker, newTime: number, newPrice: number) => void;
   onMarkerDragEnd?: () => void; // Called when drag ends (successful or cancelled)
   onMarkerContextMenu?: (marker: ChartMarker, x: number, y: number) => void;
+  onCandleContextMenu?: (candle: ChartCandle, index: number, x: number, y: number) => void; // Right-click on candle
   onNavigationComplete?: () => void; // Called after navigateToTime completes
   sessionId?: string; // For saving/restoring chart position
   height?: number;
@@ -68,6 +69,7 @@ export function CandlestickChart({
   onMarkerDrag,
   onMarkerDragEnd,
   onMarkerContextMenu,
+  onCandleContextMenu,
   onNavigationComplete,
   sessionId,
   height = 500,
@@ -740,19 +742,35 @@ export function CandlestickChart({
 
   // Handle context menu (right-click)
   const handleContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current || !onMarkerContextMenu) return;
+    if (!containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
+    // First check if right-clicking on a marker
     const marker = findMarkerAtPosition(x, y);
-    if (marker) {
+    if (marker && onMarkerContextMenu) {
       event.preventDefault();
       event.stopPropagation();
       onMarkerContextMenu(marker, event.clientX, event.clientY);
+      return;
     }
-  }, [findMarkerAtPosition, onMarkerContextMenu]);
+
+    // If no marker, check if right-clicking on a candle
+    if (onCandleContextMenu && chartRef.current && candleSeriesRef.current) {
+      const time = chartRef.current.timeScale().coordinateToTime(x);
+      if (time) {
+        const timeNumber = typeof time === "number" ? time : new Date(time as string).getTime() / 1000;
+        const candleIndex = candles.findIndex((c) => c.time === timeNumber);
+        if (candleIndex !== -1) {
+          event.preventDefault();
+          event.stopPropagation();
+          onCandleContextMenu(candles[candleIndex], candleIndex, event.clientX, event.clientY);
+        }
+      }
+    }
+  }, [findMarkerAtPosition, onMarkerContextMenu, onCandleContextMenu, candles]);
 
   // Handle click events
   const handleClick = useCallback(

@@ -527,139 +527,142 @@ COMPARISON WITH SURROUNDING CANDLES:
   // Sort pivots by index
   pivots.sort((a, b) => a.index - b.index);
 
-  // Confirm swings using break logic
-  let lastConfirmedHigh: typeof pivots[0] | null = null;
-  let lastConfirmedLow: typeof pivots[0] | null = null;
-  let pendingHigh: typeof pivots[0] | null = null;
-  let pendingLow: typeof pivots[0] | null = null;
+  // Confirm swings when direction changes (opposing pivot appears)
+  // No BOS requirement - we confirm ALL swings, not just structural breaks
+  type PivotType = typeof pivots[0];
+  let lastConfirmedHigh: PivotType | null = null;
+  let lastConfirmedLow: PivotType | null = null;
+  let pendingHigh: PivotType | null = null;
+  let pendingLow: PivotType | null = null;
 
-  for (let i = 0; i < pivots.length; i++) {
-    const pivot = pivots[i];
+  // Helper to confirm and output a pending low
+  const confirmPendingLow = (triggerPivot: typeof pivots[0]) => {
+    if (!pendingLow) return;
 
-    if (pivot.type === "high") {
-      // Check if this breaks a pending low (confirms the low)
-      if (pendingLow && pivot.price > (lastConfirmedHigh?.price || 0)) {
-        // Low is confirmed
-        const structure = lastConfirmedLow
-          ? pendingLow.price > lastConfirmedLow.price
-            ? "HL"
-            : "LL"
-          : "L";
+    const structure = lastConfirmedLow
+      ? pendingLow.price > lastConfirmedLow.price
+        ? "HL"
+        : "LL"
+      : "L";
 
-        // Build confirmation reasoning
-        let confirmationReasoning = `
+    const confirmationReasoning = `
 ═══════════════════════════════════════════════════════════════════════════════
 CONFIRMATION: SWING LOW at candle #${pendingLow.index} is now CONFIRMED
 ═══════════════════════════════════════════════════════════════════════════════
 
 CONFIRMATION TRIGGER:
-  A swing HIGH pivot at candle #${pivot.index} with price $${pivot.price.toFixed(2)}
-  broke above the last confirmed high ${lastConfirmedHigh ? `($${lastConfirmedHigh.price.toFixed(2)} at candle #${lastConfirmedHigh.index})` : '(none - first high)'}.
+  A swing HIGH pivot appeared at candle #${triggerPivot.index} with price $${triggerPivot.price.toFixed(2)}.
+  This shows price reversed direction after the low.
 
 WHY THIS CONFIRMS THE LOW:
-  The pending swing low at $${pendingLow.price.toFixed(2)} (candle #${pendingLow.index}) is confirmed
-  because price has made a higher high. This validates that the low was indeed
-  a significant turning point - price went down to that level, then reversed
-  and went higher than before.
+  The swing low at $${pendingLow.price.toFixed(2)} (candle #${pendingLow.index}) is confirmed
+  because price subsequently made a high. This validates that the low was indeed
+  a turning point - price went down to that level, then reversed upward.
 
 STRUCTURE ASSIGNMENT:
-`;
-        if (lastConfirmedLow) {
-          const diff = pendingLow.price - lastConfirmedLow.price;
-          confirmationReasoning += `  Previous confirmed low: $${lastConfirmedLow.price.toFixed(2)} at candle #${lastConfirmedLow.index}
+${lastConfirmedLow
+  ? `  Previous confirmed low: $${lastConfirmedLow.price.toFixed(2)} at candle #${lastConfirmedLow.index}
   Current low: $${pendingLow.price.toFixed(2)}
-  Difference: ${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}
-  → Structure: ${structure} (${structure === 'HL' ? 'HIGHER LOW - bullish signal' : 'LOWER LOW - bearish signal'})\n`;
-        } else {
-          confirmationReasoning += `  This is the FIRST confirmed low, no previous to compare.
-  → Structure: ${structure} (First Low)\n`;
-        }
+  Difference: ${pendingLow.price >= lastConfirmedLow.price ? '+' : ''}$${(pendingLow.price - lastConfirmedLow.price).toFixed(2)}
+  → Structure: ${structure} (${structure === 'HL' ? 'HIGHER LOW - bullish signal' : 'LOWER LOW - bearish signal'})`
+  : `  This is the FIRST confirmed low, no previous to compare.
+  → Structure: ${structure} (First Low)`}
+`;
 
-        detections.push({
-          candleIndex: pendingLow.index,
-          candleTime: new Date(pendingLow.time * 1000),
-          price: pendingLow.price,
-          detectionType: "swing_low",
-          structure,
-          confidence: 0.8,
-          metadata: {
-            confirmedAt: pivot.index,
-            confirmedByPrice: pivot.price,
-            pivotReasoning: pendingLow.pivotReasoning,
-            confirmationReasoning,
-            fullReasoning: pendingLow.pivotReasoning + confirmationReasoning,
-          },
-        });
+    detections.push({
+      candleIndex: pendingLow.index,
+      candleTime: new Date(pendingLow.time * 1000),
+      price: pendingLow.price,
+      detectionType: "swing_low",
+      structure,
+      confidence: 0.8,
+      metadata: {
+        confirmedAt: triggerPivot.index,
+        confirmedByPrice: triggerPivot.price,
+        pivotReasoning: pendingLow.pivotReasoning,
+        confirmationReasoning,
+        fullReasoning: pendingLow.pivotReasoning + confirmationReasoning,
+      },
+    });
 
-        lastConfirmedLow = pendingLow;
-        pendingLow = null;
-      }
+    lastConfirmedLow = pendingLow;
+    pendingLow = null;
+  };
 
-      // Set as pending high
-      if (!pendingHigh || pivot.price > pendingHigh.price) {
-        pendingHigh = pivot;
-      }
-    } else {
-      // Low pivot
-      // Check if this breaks a pending high (confirms the high)
-      if (pendingHigh && pivot.price < (lastConfirmedLow?.price || Infinity)) {
-        // High is confirmed
-        const structure = lastConfirmedHigh
-          ? pendingHigh.price > lastConfirmedHigh.price
-            ? "HH"
-            : "LH"
-          : "H";
+  // Helper to confirm and output a pending high
+  const confirmPendingHigh = (triggerPivot: typeof pivots[0]) => {
+    if (!pendingHigh) return;
 
-        // Build confirmation reasoning
-        let confirmationReasoning = `
+    const structure = lastConfirmedHigh
+      ? pendingHigh.price > lastConfirmedHigh.price
+        ? "HH"
+        : "LH"
+      : "H";
+
+    const confirmationReasoning = `
 ═══════════════════════════════════════════════════════════════════════════════
 CONFIRMATION: SWING HIGH at candle #${pendingHigh.index} is now CONFIRMED
 ═══════════════════════════════════════════════════════════════════════════════
 
 CONFIRMATION TRIGGER:
-  A swing LOW pivot at candle #${pivot.index} with price $${pivot.price.toFixed(2)}
-  broke below the last confirmed low ${lastConfirmedLow ? `($${lastConfirmedLow.price.toFixed(2)} at candle #${lastConfirmedLow.index})` : '(none - first low)'}.
+  A swing LOW pivot appeared at candle #${triggerPivot.index} with price $${triggerPivot.price.toFixed(2)}.
+  This shows price reversed direction after the high.
 
 WHY THIS CONFIRMS THE HIGH:
-  The pending swing high at $${pendingHigh.price.toFixed(2)} (candle #${pendingHigh.index}) is confirmed
-  because price has made a lower low. This validates that the high was indeed
-  a significant turning point - price went up to that level, then reversed
-  and went lower than before.
+  The swing high at $${pendingHigh.price.toFixed(2)} (candle #${pendingHigh.index}) is confirmed
+  because price subsequently made a low. This validates that the high was indeed
+  a turning point - price went up to that level, then reversed downward.
 
 STRUCTURE ASSIGNMENT:
-`;
-        if (lastConfirmedHigh) {
-          const diff = pendingHigh.price - lastConfirmedHigh.price;
-          confirmationReasoning += `  Previous confirmed high: $${lastConfirmedHigh.price.toFixed(2)} at candle #${lastConfirmedHigh.index}
+${lastConfirmedHigh
+  ? `  Previous confirmed high: $${lastConfirmedHigh.price.toFixed(2)} at candle #${lastConfirmedHigh.index}
   Current high: $${pendingHigh.price.toFixed(2)}
-  Difference: ${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}
-  → Structure: ${structure} (${structure === 'HH' ? 'HIGHER HIGH - bullish continuation' : 'LOWER HIGH - bearish signal'})\n`;
-        } else {
-          confirmationReasoning += `  This is the FIRST confirmed high, no previous to compare.
-  → Structure: ${structure} (First High)\n`;
-        }
+  Difference: ${pendingHigh.price >= lastConfirmedHigh.price ? '+' : ''}$${(pendingHigh.price - lastConfirmedHigh.price).toFixed(2)}
+  → Structure: ${structure} (${structure === 'HH' ? 'HIGHER HIGH - bullish continuation' : 'LOWER HIGH - bearish signal'})`
+  : `  This is the FIRST confirmed high, no previous to compare.
+  → Structure: ${structure} (First High)`}
+`;
 
-        detections.push({
-          candleIndex: pendingHigh.index,
-          candleTime: new Date(pendingHigh.time * 1000),
-          price: pendingHigh.price,
-          detectionType: "swing_high",
-          structure,
-          confidence: 0.8,
-          metadata: {
-            confirmedAt: pivot.index,
-            confirmedByPrice: pivot.price,
-            pivotReasoning: pendingHigh.pivotReasoning,
-            confirmationReasoning,
-            fullReasoning: pendingHigh.pivotReasoning + confirmationReasoning,
-          },
-        });
+    detections.push({
+      candleIndex: pendingHigh.index,
+      candleTime: new Date(pendingHigh.time * 1000),
+      price: pendingHigh.price,
+      detectionType: "swing_high",
+      structure,
+      confidence: 0.8,
+      metadata: {
+        confirmedAt: triggerPivot.index,
+        confirmedByPrice: triggerPivot.price,
+        pivotReasoning: pendingHigh.pivotReasoning,
+        confirmationReasoning,
+        fullReasoning: pendingHigh.pivotReasoning + confirmationReasoning,
+      },
+    });
 
-        lastConfirmedHigh = pendingHigh;
-        pendingHigh = null;
+    lastConfirmedHigh = pendingHigh;
+    pendingHigh = null;
+  };
+
+  for (let i = 0; i < pivots.length; i++) {
+    const pivot = pivots[i];
+
+    if (pivot.type === "high") {
+      // A HIGH pivot confirms any pending LOW (direction changed from down to up)
+      if (pendingLow) {
+        confirmPendingLow(pivot);
       }
 
-      // Set as pending low
+      // Set as pending high (keep the highest if multiple highs in a row)
+      if (!pendingHigh || pivot.price > pendingHigh.price) {
+        pendingHigh = pivot;
+      }
+    } else {
+      // A LOW pivot confirms any pending HIGH (direction changed from up to down)
+      if (pendingHigh) {
+        confirmPendingHigh(pivot);
+      }
+
+      // Set as pending low (keep the lowest if multiple lows in a row)
       if (!pendingLow || pivot.price < pendingLow.price) {
         pendingLow = pivot;
       }
@@ -668,9 +671,15 @@ STRUCTURE ASSIGNMENT:
 
   // Output any remaining pending swings that weren't confirmed
   // These are swings at the edge of the data that haven't been confirmed yet
-  if (pendingHigh) {
-    const structure = lastConfirmedHigh
-      ? pendingHigh.price > lastConfirmedHigh.price
+  // (Use type assertions to work around TypeScript control flow analysis with closures)
+  const finalPendingHigh = pendingHigh as PivotType | null;
+  const finalPendingLow = pendingLow as PivotType | null;
+  const finalLastConfirmedHigh = lastConfirmedHigh as PivotType | null;
+  const finalLastConfirmedLow = lastConfirmedLow as PivotType | null;
+
+  if (finalPendingHigh) {
+    const structure = finalLastConfirmedHigh
+      ? finalPendingHigh.price > finalLastConfirmedHigh.price
         ? "HH"
         : "LH"
       : "H";
@@ -680,33 +689,33 @@ STRUCTURE ASSIGNMENT:
 ⏳ PENDING SWING HIGH (Not yet confirmed - at data edge)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-This swing HIGH pivot at $${pendingHigh.price.toFixed(2)} has not been confirmed yet.
-It requires a future LOW pivot to break below the last confirmed low to be confirmed.
+This swing HIGH pivot at $${finalPendingHigh.price.toFixed(2)} has not been confirmed yet.
+It requires a future LOW pivot to confirm it.
 
 Structure: ${structure} (tentative - may change with more data)
 Status: PENDING - waiting for confirmation from future price action
 `;
 
     detections.push({
-      candleIndex: pendingHigh.index,
-      candleTime: new Date(pendingHigh.time * 1000),
-      price: pendingHigh.price,
+      candleIndex: finalPendingHigh.index,
+      candleTime: new Date(finalPendingHigh.time * 1000),
+      price: finalPendingHigh.price,
       detectionType: "swing_high",
       structure,
       confidence: 0.5, // Lower confidence for unconfirmed swings
       metadata: {
         confirmed: false,
         pendingConfirmation: true,
-        pivotReasoning: pendingHigh.pivotReasoning,
+        pivotReasoning: finalPendingHigh.pivotReasoning,
         confirmationReasoning: pendingReasoning,
-        fullReasoning: pendingHigh.pivotReasoning + pendingReasoning,
+        fullReasoning: finalPendingHigh.pivotReasoning + pendingReasoning,
       },
     });
   }
 
-  if (pendingLow) {
-    const structure = lastConfirmedLow
-      ? pendingLow.price > lastConfirmedLow.price
+  if (finalPendingLow) {
+    const structure = finalLastConfirmedLow
+      ? finalPendingLow.price > finalLastConfirmedLow.price
         ? "HL"
         : "LL"
       : "L";
@@ -716,26 +725,26 @@ Status: PENDING - waiting for confirmation from future price action
 ⏳ PENDING SWING LOW (Not yet confirmed - at data edge)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-This swing LOW pivot at $${pendingLow.price.toFixed(2)} has not been confirmed yet.
-It requires a future HIGH pivot to break above the last confirmed high to be confirmed.
+This swing LOW pivot at $${finalPendingLow.price.toFixed(2)} has not been confirmed yet.
+It requires a future HIGH pivot to confirm it.
 
 Structure: ${structure} (tentative - may change with more data)
 Status: PENDING - waiting for confirmation from future price action
 `;
 
     detections.push({
-      candleIndex: pendingLow.index,
-      candleTime: new Date(pendingLow.time * 1000),
-      price: pendingLow.price,
+      candleIndex: finalPendingLow.index,
+      candleTime: new Date(finalPendingLow.time * 1000),
+      price: finalPendingLow.price,
       detectionType: "swing_low",
       structure,
       confidence: 0.5, // Lower confidence for unconfirmed swings
       metadata: {
         confirmed: false,
         pendingConfirmation: true,
-        pivotReasoning: pendingLow.pivotReasoning,
+        pivotReasoning: finalPendingLow.pivotReasoning,
         confirmationReasoning: pendingReasoning,
-        fullReasoning: pendingLow.pivotReasoning + pendingReasoning,
+        fullReasoning: finalPendingLow.pivotReasoning + pendingReasoning,
       },
     });
   }
