@@ -89,6 +89,13 @@ export async function POST(request: NextRequest) {
 
     const { name, symbol, timeframe, patternType, patternSettings, candleData } = validation.data;
 
+    // Debug logging
+    console.log("[Session Create] candleData received:", {
+      hasCandleData: !!candleData,
+      keys: candleData ? Object.keys(candleData) : [],
+      candlesLength: (candleData as { candles?: unknown[] })?.candles?.length ?? "no candles key",
+    });
+
     const patternSession = await prisma.patternSession.create({
       data: {
         id: generateUlid(),

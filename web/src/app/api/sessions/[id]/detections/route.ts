@@ -96,12 +96,19 @@ export async function POST(
 
     if (action === "run_detection") {
       // Run pattern detection on the candle data
-      const candleData = patternSession.candleData as { candles?: Array<{ time: number; open: number; high: number; low: number; close: number }> };
+      const candleData = patternSession.candleData as { candles?: Array<{ time: number; open: number; high: number; low: number; close: number }> } | null;
+
+      // Debug logging
+      console.log("[Detection] Session candleData type:", typeof patternSession.candleData);
+      console.log("[Detection] Session candleData keys:", patternSession.candleData ? Object.keys(patternSession.candleData as object) : "null");
+      console.log("[Detection] Candles array length:", candleData?.candles?.length ?? "undefined");
+
       const candles = candleData?.candles || [];
 
       if (candles.length === 0) {
+        console.log("[Detection] ERROR: No candles found. Full candleData:", JSON.stringify(patternSession.candleData).slice(0, 500));
         return NextResponse.json(
-          { success: false, error: "No candle data in session" },
+          { success: false, error: "No candle data in session. Please recreate the session." },
           { status: 400 }
         );
       }
