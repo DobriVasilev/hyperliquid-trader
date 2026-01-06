@@ -91,6 +91,10 @@ export function CandlestickChart({
   const isDraggingRef = useRef(false);
   const justFinishedDragRef = useRef(false); // Prevent click after drag
 
+  // Click vs drag detection - track initial mouse position
+  const pendingClickRef = useRef<{ marker: ChartMarker; startX: number; startY: number } | null>(null);
+  const DRAG_THRESHOLD = 5; // Pixels mouse must move to be considered a drag
+
   // Move mode cursor position
   const [moveModePosition, setMoveModePosition] = useState<{ x: number; y: number } | null>(null);
 
@@ -513,9 +517,9 @@ export function CandlestickChart({
     return null;
   }, [candles, markers, isInChartArea]);
 
-  // Handle mouse down - for drag initiation
+  // Handle mouse down - for drag initiation (deferred until threshold met)
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current || !onMarkerDrag) return;
+    if (!containerRef.current) return;
     if (event.button !== 0) return; // Only left click
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -524,26 +528,12 @@ export function CandlestickChart({
 
     const marker = findMarkerAtPosition(x, y);
     if (marker) {
-      // Start drag mode
-      console.log('[Chart] Drag started', { markerId: marker.id, x, y });
-      event.preventDefault();
-      event.stopPropagation();
-      isDraggingRef.current = true;
-      setDraggingMarker(marker);
-      setDragPosition({ x, y });
-
-      // Notify parent that drag started (so they can hide the original marker)
-      onMarkerDragStart?.(marker);
-
-      // Disable chart interaction while dragging
-      if (chartRef.current) {
-        chartRef.current.applyOptions({
-          handleScroll: false,
-          handleScale: false,
-        });
-      }
+      // Store as pending click - will become drag if mouse moves > threshold
+      console.log('[Chart] Pending click on marker', { markerId: marker.id, x, y });
+      pendingClickRef.current = { marker, startX: x, startY: y };
+      // Don't prevent default yet - let click through if no movement
     }
-  }, [findMarkerAtPosition, onMarkerDrag, onMarkerDragStart]);
+  }, [findMarkerAtPosition]);
 
   // Handle mouse move
   const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -560,16 +550,59 @@ export function CandlestickChart({
       setMoveModePosition(null);
     }
 
-    // Handle drag
+    // Check if pending click should convert to drag (when threshold exceeded)
+    if (pendingClickRef.current && !isDraggingRef.current && onMarkerDrag) {
+      const { marker, startX, startY } = pendingClickRef.current;
+      const deltaX = Math.abs(x - startX);
+      const deltaY = Math.abs(y - startY);
+
+      if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+        // Convert to drag mode
+        console.log('[Chart] Drag started (threshold exceeded)', { markerId: marker.id, deltaX, deltaY });
+        isDraggingRef.current = true;
+        setDraggingMarker(marker);
+        setDragPosition({ x, y });
+        pendingClickRef.current = null;
+
+        // Notify parent that drag started (so they can hide the original marker)
+        onMarkerDragStart?.(marker);
+
+        // Disable chart interaction while dragging
+        if (chartRef.current) {
+          chartRef.current.applyOptions({
+            handleScroll: false,
+            handleScale: false,
+          });
+        }
+      }
+    }
+
+    // Handle active drag
     if (isDraggingRef.current && draggingMarker) {
       event.preventDefault();
       setDragPosition({ x, y });
     }
-  }, [draggingMarker, isInMoveMode, isInChartArea]);
+  }, [draggingMarker, isInMoveMode, isInChartArea, onMarkerDrag, onMarkerDragStart]);
 
-  // Handle mouse up - complete drag
+  // Handle mouse up - complete drag or handle as click
   const handleMouseUp = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const wasDragging = isDraggingRef.current;
+
+    // Check if this was a click (pending click that never became a drag)
+    if (pendingClickRef.current && !isDraggingRef.current) {
+      const { marker } = pendingClickRef.current;
+      console.log('[Chart] Click on marker (no drag)', { markerId: marker.id });
+      pendingClickRef.current = null;
+
+      // Fire the marker click event
+      if (onMarkerClick) {
+        onMarkerClick(marker);
+      }
+      return;
+    }
+
+    // Clear pending click
+    pendingClickRef.current = null;
 
     // Re-enable chart interaction
     if (chartRef.current) {
@@ -663,7 +696,7 @@ export function CandlestickChart({
     setTimeout(() => {
       justFinishedDragRef.current = false;
     }, 100);
-  }, [draggingMarker, dragPosition, candles, magnetMode, onMarkerDrag]);
+  }, [draggingMarker, dragPosition, candles, magnetMode, onMarkerDrag, onMarkerClick]);
 
   // Handle context menu (right-click)
   const handleContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -773,6 +806,9 @@ export function CandlestickChart({
   // Global mouse up handler (in case mouse leaves the chart while dragging)
   useEffect(() => {
     const handleGlobalMouseUp = () => {
+      // Clear pending click if user releases outside chart
+      pendingClickRef.current = null;
+
       if (isDraggingRef.current) {
         // Re-enable chart interaction
         if (chartRef.current) {

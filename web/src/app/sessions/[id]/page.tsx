@@ -86,6 +86,10 @@ export default function SessionDetailPage({
   const [draggingMarkerId, setDraggingMarkerId] = useState<string | null>(null);
   const dragApiCallInProgressRef = useRef(false);
 
+  // Undo history - stores correction IDs that can be undone
+  const [undoHistory, setUndoHistory] = useState<string[]>([]);
+  const [isUndoing, setIsUndoing] = useState(false);
+
   // Chart tool state - like TradingView drawing tools
   const [activeTool, setActiveTool] = useState<ChartTool>("select");
 
@@ -99,11 +103,47 @@ export default function SessionDetailPage({
     marker: ChartMarker;
   } | null>(null);
 
+  // Undo the last correction
+  const handleUndo = useCallback(async () => {
+    if (undoHistory.length === 0 || isUndoing) return;
+
+    const lastCorrectionId = undoHistory[undoHistory.length - 1];
+    console.log('[Session] Undoing correction:', lastCorrectionId);
+
+    setIsUndoing(true);
+    try {
+      const response = await fetch(`/api/sessions/${id}/corrections/${lastCorrectionId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Remove from undo history
+        setUndoHistory(prev => prev.slice(0, -1));
+        // Refetch session to get updated detections
+        await refetch();
+      } else {
+        console.error("Undo failed:", data.error);
+      }
+    } catch (error) {
+      console.error("Undo error:", error);
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [id, undoHistory, isUndoing, refetch]);
+
   // Keyboard shortcuts for tools
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Ctrl+Z / Cmd+Z for undo
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
 
       const key = e.key;
       switch (key) {
@@ -133,7 +173,7 @@ export default function SessionDetailPage({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [handleUndo]);
 
   // Fetch fresh candles if session doesn't have them stored
   const { candles: fetchedCandles, isLoading: candlesLoading } = useCandles({
@@ -333,6 +373,12 @@ export default function SessionDetailPage({
 
       if (!data.success) {
         throw new Error(data.error || "Failed to submit correction");
+      }
+
+      // Add correction ID to undo history
+      if (data.data?.id) {
+        setUndoHistory(prev => [...prev, data.data.id]);
+        console.log('[Session] Added to undo history:', data.data.id);
       }
 
       // Refetch session to get updated data

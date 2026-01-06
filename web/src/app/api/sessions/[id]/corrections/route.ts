@@ -178,6 +178,11 @@ export async function POST(
         data: { status: "pending" },
       });
     } else if (correctionType === "move" && detectionId) {
+      // Get original detection to preserve its metadata
+      const originalDetection = await prisma.patternDetection.findUnique({
+        where: { id: detectionId },
+      });
+
       // Mark original as moved
       await prisma.patternDetection.update({
         where: { id: detectionId },
@@ -186,6 +191,10 @@ export async function POST(
 
       // Create new detection at the moved position
       if (correctedTime && correctedPrice) {
+        // Preserve detection_mode from original detection
+        const originalMetadata = originalDetection?.metadata as Record<string, unknown> | null;
+        const detectionMode = originalMetadata?.detection_mode || "wicks";
+
         const movedDetection = await prisma.patternDetection.create({
           data: {
             id: generateUlid(),
@@ -200,7 +209,8 @@ export async function POST(
               source: "moved",
               movedFrom: detectionId,
               movedBy: session.user.id,
-              correctionId: correction.id
+              correctionId: correction.id,
+              detection_mode: detectionMode, // Preserve the detection mode
             })),
           },
         });
@@ -212,6 +222,15 @@ export async function POST(
 
     // If it's an "add" correction, create a new detection
     if (correctionType === "add" && correctedTime && correctedPrice) {
+      // Get session settings for detection mode
+      const sessionSettings = patternSession.patternSettings as { detection_mode?: "wicks" | "closes" } | null;
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { preferences: true },
+      });
+      const userPrefs = user?.preferences as { swingDetectionMode?: "wicks" | "closes" } | null;
+      const detectionMode = sessionSettings?.detection_mode || userPrefs?.swingDetectionMode || "wicks";
+
       const newDetection = await prisma.patternDetection.create({
         data: {
           id: generateUlid(),
@@ -225,7 +244,8 @@ export async function POST(
           metadata: JSON.parse(JSON.stringify({
             source: "manual",
             addedBy: session.user.id,
-            correctionId: correction.id
+            correctionId: correction.id,
+            detection_mode: detectionMode, // Use session/user detection mode setting
           })),
         },
       });
