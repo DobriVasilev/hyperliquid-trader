@@ -22,6 +22,13 @@ model User {
   image         String?
   password      String?   @db.Text // For credentials provider
 
+  // Role: admin, moderator, member
+  role          String    @default("member")
+
+  // Bio for profile
+  bio           String?   @db.Text
+  username      String?   @unique // @username for mentions
+
   // User preferences (stored as JSON)
   // {defaultSymbol, defaultTimeframe, swingDetectionMode, emailNotifications, collaborationAlerts}
   preferences   Json?
@@ -54,6 +61,12 @@ model User {
   // E2E Encryption
   keyBundle          UserKeyBundle?
   encryptedSessions  EncryptedSession[]
+
+  // Friend/Contact System
+  sentFriendRequests     FriendRequest[] @relation("SentRequests")
+  receivedFriendRequests FriendRequest[] @relation("ReceivedRequests")
+  friendsAsUser1         Friendship[]    @relation("FriendUser1")
+  friendsAsUser2         Friendship[]    @relation("FriendUser2")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -747,4 +760,56 @@ model SafetyNumber {
   updatedAt       DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
+}
+
+// ============================================================================
+// FRIEND/CONTACT SYSTEM (Telegram-style DM requests)
+// ============================================================================
+
+// Friend Request - required before DM
+model FriendRequest {
+  id          String   @id @default(cuid())
+  senderId    String
+  receiverId  String
+
+  // Initial message with request
+  message     String?  @db.Text
+
+  // Status: pending, accepted, declined, blocked
+  status      String   @default("pending")
+
+  // Relations
+  sender      User     @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  respondedAt DateTime?
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+  @@index([senderId])
+}
+
+// Friendship - established after request accepted
+model Friendship {
+  id          String   @id @default(cuid())
+
+  // Always store with smaller ID as user1 for consistency
+  user1Id     String
+  user2Id     String
+
+  // Relations
+  user1       User     @relation("FriendUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User     @relation("FriendUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  // Blocked status (by either user)
+  blockedByUser1 Boolean @default(false)
+  blockedByUser2 Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
 }

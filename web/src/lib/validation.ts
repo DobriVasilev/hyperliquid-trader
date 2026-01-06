@@ -79,10 +79,13 @@ export const updateCommentSchema = z.object({
   resolved: z.boolean().optional(),
 });
 
-// Share schemas
+// Share schemas - accepts either email or userId
 export const createShareSchema = z.object({
-  email: z.string().email().max(255),
+  email: z.string().email().max(255).optional(),
+  userId: z.string().cuid().optional(),
   permission: z.enum(["view", "comment", "edit", "admin"]).default("view"),
+}).refine(data => data.email || data.userId, {
+  message: "Either email or userId must be provided",
 });
 
 export const updatePublicSchema = z.object({

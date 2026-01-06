@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-// GET /api/chat/users - Search users for @mentions
+// GET /api/chat/users - Search users for @mentions and sharing
 export async function GET(request: NextRequest) {
   const session = await auth();
 
@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q") || "";
+    // Support both 'q' (for mentions) and 'search' (for sharing modal)
+    const query = searchParams.get("q") || searchParams.get("search") || "";
     const limit = Math.min(parseInt(searchParams.get("limit") || "10"), 20);
 
     // Search users by name or email
@@ -50,10 +51,35 @@ export async function GET(request: NextRequest) {
 
     const presenceMap = new Map(presences.map(p => [p.userId, p.status]));
 
-    const usersWithStatus = users.map(user => ({
-      ...user,
-      status: presenceMap.get(user.id) || "offline",
-    }));
+    // Get DM history counts for each user
+    // Users with whom we've exchanged messages
+    const dmCounts = await prisma.directMessage.groupBy({
+      by: ["senderId", "receiverId"],
+      where: {
+        OR: [
+          { senderId: session.user.id, receiverId: { in: userIds } },
+          { receiverId: session.user.id, senderId: { in: userIds } },
+        ],
+      },
+      _count: true,
+    });
+
+    // Build a map of userId -> message count
+    const dmCountMap = new Map<string, number>();
+    for (const dm of dmCounts) {
+      const otherUserId = dm.senderId === session.user.id ? dm.receiverId : dm.senderId;
+      dmCountMap.set(otherUserId, (dmCountMap.get(otherUserId) || 0) + dm._count);
+    }
+
+    const usersWithStatus = users.map(user => {
+      const messageCount = dmCountMap.get(user.id) || 0;
+      return {
+        ...user,
+        status: presenceMap.get(user.id) || "offline",
+        hasDM: messageCount > 0,
+        isFriend: messageCount >= 5, // Consider "friend" if 5+ messages exchanged
+      };
+    });
 
     return NextResponse.json({
       success: true,

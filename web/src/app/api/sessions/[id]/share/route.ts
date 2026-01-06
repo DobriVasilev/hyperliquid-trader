@@ -91,7 +91,7 @@ export async function POST(
       );
     }
 
-    const { email, permission } = validation.data;
+    const { email, userId, permission } = validation.data;
 
     // Only owner or admin can share
     const patternSession = await prisma.patternSession.findFirst({
@@ -111,10 +111,10 @@ export async function POST(
       );
     }
 
-    // Find user by email
-    const userToShare = await prisma.user.findUnique({
-      where: { email },
-    });
+    // Find user by email or userId
+    const userToShare = userId
+      ? await prisma.user.findUnique({ where: { id: userId } })
+      : await prisma.user.findUnique({ where: { email: email! } });
 
     if (!userToShare) {
       return NextResponse.json(
