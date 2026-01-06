@@ -541,16 +541,16 @@ export default function SessionDetailPage({
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between relative">
-          <nav className="flex items-center gap-4">
-            <Link href="/" className="text-xl font-bold hover:text-blue-400 transition-colors cursor-pointer">
+          <nav className="flex items-center gap-2 text-sm">
+            <Link href="/" className="font-semibold text-white hover:opacity-80 transition-opacity">
               Systems Trader
             </Link>
-            <span className="text-gray-500">/</span>
-            <Link href="/sessions" className="text-gray-400 hover:text-white transition-colors cursor-pointer">
+            <span className="text-gray-600">/</span>
+            <Link href="/sessions" className="text-gray-400 hover:text-gray-200 transition-colors">
               Sessions
             </Link>
-            <span className="text-gray-500">/</span>
-            <span className="text-white">
+            <span className="text-gray-600">/</span>
+            <span className="text-gray-300">
               {isLoading ? "Loading..." : session?.name || "Session"}
             </span>
           </nav>
