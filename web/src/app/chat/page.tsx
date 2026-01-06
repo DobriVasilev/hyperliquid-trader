@@ -398,9 +398,21 @@ function ChatPageContent() {
         updatePresence(),
       ]);
 
-      // Check if user is admin
-      if (session?.user?.email === "dobrivassi09@gmail.com") {
-        setIsAdmin(true);
+      // Check if user is admin (fetch from API to verify database role)
+      try {
+        const adminRes = await fetch("/api/user/me");
+        const adminData = await adminRes.json();
+        if (adminData.success && adminData.data?.role === "admin") {
+          setIsAdmin(true);
+        } else if (session?.user?.email === "dobrivassi09@gmail.com") {
+          // Fallback for the main admin email
+          setIsAdmin(true);
+        }
+      } catch {
+        // Fallback: check by email
+        if (session?.user?.email === "dobrivassi09@gmail.com") {
+          setIsAdmin(true);
+        }
       }
 
       setIsLoading(false);
@@ -1238,7 +1250,16 @@ function ChatPageContent() {
                   {onlineUsers.map((user) => (
                     <button
                       key={user.id}
-                      onClick={() => startDMWithUser(user.userId)}
+                      onClick={() => {
+                        // Open user profile sidebar instead of DMs
+                        setSelectedProfileUser({
+                          id: user.userId,
+                          name: user.userName,
+                          image: user.userAvatar,
+                          lastSeen: user.lastSeen,
+                        });
+                        setShowUserProfile(true);
+                      }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-left hover:opacity-80"
                       style={{ backgroundColor: "transparent" }}
                     >
@@ -1372,7 +1393,7 @@ function ChatPageContent() {
           ) : viewMode === "channels" ? (
             <>
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-4 chat-doodle-bg">
                 {groupedMessages.map((group) => (
                   <div key={group.date}>
                     {/* Date separator */}
@@ -1867,7 +1888,7 @@ function ChatPageContent() {
                 })()}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 chat-doodle-bg">
                 {dmMessages.map((message) => {
                   const isOwn = message.senderId === session.user?.id;
                   return (
@@ -2233,6 +2254,8 @@ function ChatPageContent() {
             if (selectedChannelId === channelId) {
               setSelectedChannelId(null);
             }
+          } else {
+            throw new Error(result.error || "Failed to delete channel");
           }
         }}
         onEditChannel={async (channelId, data) => {

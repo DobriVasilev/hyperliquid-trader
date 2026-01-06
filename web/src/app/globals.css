@@ -281,3 +281,22 @@ body {
     opacity: 0.8;
   }
 }
+
+/* ============================================================================
+   CHAT DOODLE BACKGROUND
+   ============================================================================ */
+
+.chat-doodle-bg {
+  position: relative;
+  background-color: var(--bg-0);
+}
+
+.chat-doodle-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cdefs%3E%3Cstyle%3E.a%7Bfill:none;stroke:%2310B981;stroke-width:0.8;stroke-linecap:round;stroke-linejoin:round;%7D%3C/style%3E%3C/defs%3E%3C!-- Stars --%3E%3Cpath class='a' d='M20,15 l2,5 l5,0 l-4,3 l2,5 l-5,-3 l-5,3 l2,-5 l-4,-3 l5,0 z'/%3E%3Cpath class='a' d='M170,45 l1.5,4 l4,0 l-3,2.5 l1.5,4 l-4,-2.5 l-4,2.5 l1.5,-4 l-3,-2.5 l4,0 z'/%3E%3Cpath class='a' d='M85,180 l1.5,4 l4,0 l-3,2.5 l1.5,4 l-4,-2.5 l-4,2.5 l1.5,-4 l-3,-2.5 l4,0 z'/%3E%3C!-- Hearts --%3E%3Cpath class='a' d='M50,40 c-3,-8 -15,-8 -15,3 c0,8 15,15 15,15 s15,-7 15,-15 c0,-11 -12,-11 -15,-3'/%3E%3Cpath class='a' d='M145,160 c-2,-5 -10,-5 -10,2 c0,5 10,10 10,10 s10,-5 10,-10 c0,-7 -8,-7 -10,-2'/%3E%3C!-- Moons --%3E%3Cpath class='a' d='M160,90 a12,12 0 1,1 0,24 a9,9 0 1,0 0,-24'/%3E%3Cpath class='a' d='M30,150 a8,8 0 1,1 0,16 a6,6 0 1,0 0,-16'/%3E%3C!-- Diamonds --%3E%3Cpath class='a' d='M100,20 l8,12 l-8,12 l-8,-12 z'/%3E%3Cpath class='a' d='M180,130 l6,9 l-6,9 l-6,-9 z'/%3E%3C!-- Circles --%3E%3Ccircle class='a' cx='70' cy='90' r='8'/%3E%3Ccircle class='a' cx='130' cy='30' r='5'/%3E%3Ccircle class='a' cx='40' cy='180' r='6'/%3E%3C!-- Sparkles --%3E%3Cpath class='a' d='M120,70 l0,8 M116,74 l8,0'/%3E%3Cpath class='a' d='M25,100 l0,6 M22,103 l6,0'/%3E%3Cpath class='a' d='M175,175 l0,6 M172,178 l6,0'/%3E%3C!-- Clouds --%3E%3Cpath class='a' d='M60,130 a8,8 0 0,1 8,-8 a10,10 0 0,1 18,0 a8,8 0 0,1 8,8 l-34,0'/%3E%3C!-- Lightning --%3E%3Cpath class='a' d='M140,100 l-5,10 l6,0 l-5,10'/%3E%3C!-- Swirls --%3E%3Cpath class='a' d='M95,120 a5,5 0 0,1 5,5 a7,7 0 0,1 -7,7 a9,9 0 0,1 -9,-9'/%3E%3C!-- Dots pattern --%3E%3Ccircle class='a' cx='15' cy='70' r='1.5'/%3E%3Ccircle class='a' cx='185' cy='85' r='1.5'/%3E%3Ccircle class='a' cx='110' cy='150' r='1.5'/%3E%3Ccircle class='a' cx='65' cy='55' r='1'/%3E%3Ccircle class='a' cx='155' cy='10' r='1'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none;
+}

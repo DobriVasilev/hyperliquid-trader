@@ -83,6 +83,7 @@ export function AdminPanel({
       await onDeleteChannel(channelId);
     } catch (error) {
       console.error("Error deleting channel:", error);
+      alert("Failed to delete channel. Make sure you have admin permissions.");
     } finally {
       setIsLoading(false);
     }

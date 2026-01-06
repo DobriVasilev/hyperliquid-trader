@@ -1,192 +1,129 @@
-// Telegram Dark Theme - Exact Color Values
-// These colors are extracted from Telegram's official dark theme
+// Chat Theme - Using app's existing design system colors
+// Matches the Linear.app / Dobri Lab inspired glass morphism design
 
-export const TELEGRAM_COLORS = {
-  // Primary/Accent
-  primary: "#0088CC",           // Lochmara - main interactive elements
-  primaryGradient: "#229ED9",   // Gradient accent
-  accent: "#6ab2f2",            // Accent text color
+export const CHAT_COLORS = {
+  // Backgrounds (from globals.css)
+  bgColor: "#0F0F10",           // --bg-0
+  secondaryBg: "#151516",       // --bg-1
+  sectionBg: "#1C1C1E",         // --bg-2
+  headerBg: "#151516",          // --bg-1
 
-  // Backgrounds
-  bgColor: "#17212b",           // Main background
-  secondaryBg: "#232e3c",       // Secondary background (input fields, cards)
-  sectionBg: "#17212b",         // Section background
-  headerBg: "#17212b",          // Header background
-
-  // Buttons
-  button: "#5288c1",            // Button background
-  buttonText: "#ffffff",        // Button text
-  buttonHover: "#4a7ab3",       // Button hover state
+  // Primary/Accent (green from app)
+  primary: "#10B981",           // --accent
+  primaryHover: "#059669",      // --accent-hover
+  primaryGlow: "rgba(16, 185, 129, 0.3)", // --accent-glow
 
   // Text
-  text: "#f5f5f5",              // Primary text
-  textSecondary: "#aaaaaa",     // Secondary text
-  hint: "#708499",              // Hint/subtitle text
-  link: "#6ab3f3",              // Link color
+  text: "#EEEFF1",              // --text-primary
+  textSecondary: "#9CA3AF",     // --text-secondary
+  hint: "#6B7280",              // --text-muted
+
+  // Borders
+  border: "rgba(255, 255, 255, 0.08)",      // --border
+  borderHover: "rgba(255, 255, 255, 0.15)", // --border-hover
+
+  // Buttons
+  button: "#10B981",
+  buttonText: "#ffffff",
+  buttonHover: "#059669",
 
   // Status
-  online: "#4DCA4D",            // Online indicator green
-  destructive: "#ec3942",       // Error/delete red
-  warning: "#f5a623",           // Warning orange
+  online: "#10B981",            // Same green as accent
+  destructive: "#ef4444",       // Red
+  warning: "#f59e0b",           // Orange
 
   // Message Bubbles
-  outgoingBubble: "#2b5278",    // Outgoing message background
-  outgoingBubbleGradient: "#1e3a52", // Gradient for outgoing
-  incomingBubble: "#182533",    // Incoming message background
-
-  // Borders & Dividers
-  border: "#2b3e50",            // Border color
-  divider: "#1c2836",           // Divider lines
+  outgoingBubble: "rgba(16, 185, 129, 0.15)",  // Green tinted for outgoing
+  outgoingBubbleBorder: "rgba(16, 185, 129, 0.3)",
+  incomingBubble: "#1C1C1E",    // --bg-2 for incoming
 
   // Input
-  inputBg: "#242f3d",           // Input field background
-  inputBorder: "#3a4a5c",       // Input border
-  inputFocus: "#5288c1",        // Input focus border
-
-  // Reactions
-  reactionBg: "#2b3e50",        // Reaction button background
-  reactionBgSelected: "#3a5068", // Selected reaction
+  inputBg: "rgba(0, 0, 0, 0.3)",
+  inputBorder: "rgba(255, 255, 255, 0.08)",
+  inputFocus: "rgba(16, 185, 129, 0.3)",
 
   // Selection
-  selection: "#2b5278",         // Selected item background
-  hover: "#1e2c3a",             // Hover state background
+  selection: "rgba(16, 185, 129, 0.2)",
+  hover: "rgba(255, 255, 255, 0.03)",
 
-  // Scrollbar
-  scrollbar: "#3a4a5c",
-  scrollbarHover: "#4a5a6c",
+  // Link
+  link: "#10B981",
+  accent: "#10B981",
+
+  // Reactions (for emoji picker)
+  reactionBg: "rgba(255, 255, 255, 0.08)",
+  reactionBgSelected: "rgba(16, 185, 129, 0.2)",
 } as const;
 
-// Message bubble styles
-export const BUBBLE_STYLES = {
-  // Border radius for message bubbles (Telegram uses slightly asymmetric)
-  borderRadius: {
-    default: "18px",
-    tail: "4px",        // Corner with tail
-    grouped: "8px",     // Grouped messages
-  },
+// Re-export as TELEGRAM_COLORS for backwards compatibility
+export const TELEGRAM_COLORS = CHAT_COLORS;
 
-  // Spacing
-  spacing: {
-    betweenMessages: "2px",      // Same sender consecutive
-    betweenGroups: "8px",        // Different sender
-    bubblePadding: "8px 12px",   // Inside bubble
-  },
-
-  // Tail SVG paths for bubble tails
-  tailPaths: {
-    outgoing: "M 0,0 Q 0,10 10,10 L 0,10 Z",
-    incoming: "M 10,0 Q 10,10 0,10 L 10,10 Z",
-  },
-} as const;
-
-// Read receipt states
-export const READ_RECEIPT_STATES = {
-  sending: "clock",      // Clock icon while sending
-  sent: "check",         // Single gray checkmark
-  delivered: "check-check", // Double gray checkmarks
-  read: "check-check-blue", // Double blue checkmarks
-} as const;
-
-// Online status labels
-export const ONLINE_STATUS_LABELS = {
-  online: "online",
-  recentlyOnline: "last seen recently",           // 1 sec - 3 days
-  withinWeek: "last seen within a week",          // 3-7 days
-  withinMonth: "last seen within a month",        // 7-30 days
-  longTimeAgo: "last seen a long time ago",       // 30+ days
-} as const;
-
-// Get last seen text based on timestamp
-export function getLastSeenText(lastSeen: Date | string | null): string {
-  if (!lastSeen) return ONLINE_STATUS_LABELS.longTimeAgo;
-
-  const date = new Date(lastSeen);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  // Within 2 minutes = online
-  if (diffMs < 2 * 60 * 1000) {
-    return ONLINE_STATUS_LABELS.online;
-  }
-
-  // Within 3 days
-  if (diffDays < 3) {
-    // Show exact time for today
-    if (date.toDateString() === now.toDateString()) {
-      return `last seen today at ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    }
-    // Yesterday
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === yesterday.toDateString()) {
-      return `last seen yesterday at ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    }
-    return ONLINE_STATUS_LABELS.recentlyOnline;
-  }
-
-  // Within a week
-  if (diffDays < 7) {
-    return ONLINE_STATUS_LABELS.withinWeek;
-  }
-
-  // Within a month
-  if (diffDays < 30) {
-    return ONLINE_STATUS_LABELS.withinMonth;
-  }
-
-  return ONLINE_STATUS_LABELS.longTimeAgo;
-}
-
-// Typing indicator animation timing
-export const TYPING_ANIMATION = {
-  dotDelay: 200,        // ms between each dot animation
-  timeout: 5000,        // ms before clearing typing indicator
-} as const;
-
-// Emoji categories for picker
-export const EMOJI_CATEGORIES = [
-  { id: "recent", label: "Recent", icon: "🕐" },
-  { id: "smileys", label: "Smileys & Emotion", icon: "😀" },
-  { id: "people", label: "People & Body", icon: "👋" },
-  { id: "animals", label: "Animals & Nature", icon: "🐶" },
-  { id: "food", label: "Food & Drink", icon: "🍔" },
-  { id: "activities", label: "Activities", icon: "⚽" },
-  { id: "travel", label: "Travel & Places", icon: "🚗" },
-  { id: "objects", label: "Objects", icon: "💡" },
-  { id: "symbols", label: "Symbols", icon: "❤️" },
-  { id: "flags", label: "Flags", icon: "🏳️" },
-] as const;
-
-// Default reactions (Telegram style)
+// Default reactions
 export const DEFAULT_REACTIONS = [
-  { emoji: "👍", label: "Like" },
-  { emoji: "❤️", label: "Love" },
-  { emoji: "🔥", label: "Fire" },
-  { emoji: "🎉", label: "Celebrate" },
-  { emoji: "😢", label: "Sad" },
-  { emoji: "😱", label: "Shocked" },
-  { emoji: "🤔", label: "Thinking" },
-  { emoji: "👎", label: "Dislike" },
-] as const;
+  { emoji: "❤️", animation: "pulse" },
+  { emoji: "👍", animation: "bounce" },
+  { emoji: "🔥", animation: "shake" },
+  { emoji: "🎉", animation: "explode" },
+  { emoji: "😢", animation: "wobble" },
+  { emoji: "😱", animation: "shake" },
+  { emoji: "🤔", animation: "tilt" },
+  { emoji: "👎", animation: "bounce" },
+];
 
-// Animation durations
-export const ANIMATIONS = {
-  springConfig: {
-    tension: 300,
-    friction: 20,
-  },
-  slideUp: 300,       // Emoji picker slide up
-  fadeIn: 150,        // Quick fade in
-  reaction: 400,      // Reaction animation
-  messageSend: 200,   // Message send animation
-} as const;
+// Emoji categories for the picker
+export const EMOJI_CATEGORIES = [
+  { id: "recent", icon: "🕐", label: "Recent" },
+  { id: "smileys", icon: "😀", label: "Smileys" },
+  { id: "people", icon: "👋", label: "People" },
+  { id: "animals", icon: "🐶", label: "Animals" },
+  { id: "food", icon: "🍕", label: "Food" },
+  { id: "activities", icon: "⚽", label: "Activities" },
+  { id: "travel", icon: "✈️", label: "Travel" },
+  { id: "objects", icon: "💡", label: "Objects" },
+  { id: "symbols", icon: "❤️", label: "Symbols" },
+  { id: "flags", icon: "🏳️", label: "Flags" },
+];
 
 // Voice message settings
 export const VOICE_MESSAGE = {
-  slideToCancel: 100,    // px to slide left to cancel
-  slideToLock: 80,       // px to slide up to lock
-  maxDuration: 60 * 60,  // 1 hour max
-  playbackSpeeds: [1, 1.5, 2],
-  waveformBars: 50,      // Number of bars in waveform
-} as const;
+  maxDuration: 300, // 5 minutes
+  waveformBars: 40,
+  playbackSpeeds: [1, 1.5, 2] as const,
+  slideToCancel: 100, // px to slide left to cancel
+  slideToLock: 80,    // px to slide up to lock recording
+};
+
+// Animation configs
+export const ANIMATIONS = {
+  spring: { tension: 300, friction: 20 },
+  quick: { duration: 150 },
+  normal: { duration: 200 },
+  slow: { duration: 300 },
+  slideUp: 200, // duration in ms for slide up animation
+};
+
+// Get last seen text
+export function getLastSeenText(lastSeen: Date | string | null): string {
+  if (!lastSeen) return "last seen a long time ago";
+
+  const date = typeof lastSeen === "string" ? new Date(lastSeen) : lastSeen;
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) return "online";
+  if (minutes < 5) return "last seen just now";
+  if (minutes < 60) return `last seen ${minutes} minutes ago`;
+  if (hours < 24) {
+    const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return `last seen today at ${time}`;
+  }
+  if (days < 2) return "last seen yesterday";
+  if (days < 7) return "last seen within a week";
+  if (days < 30) return "last seen within a month";
+  return "last seen a long time ago";
+}
