@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { receiverId, content, imageUrl } = body;
+    const { receiverId, content, attachments } = body;
 
     if (!receiverId) {
       return NextResponse.json(
@@ -118,9 +118,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!content?.trim() && !imageUrl) {
+    if (!content?.trim() && (!attachments || attachments.length === 0)) {
       return NextResponse.json(
-        { success: false, error: "Message content or image is required" },
+        { success: false, error: "Message content or attachment is required" },
         { status: 400 }
       );
     }
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
         senderId: session.user.id,
         receiverId,
         content: content?.trim() || "",
-        imageUrl,
+        attachments: attachments || null,
       },
       include: {
         sender: {

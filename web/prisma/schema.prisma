@@ -38,10 +38,17 @@ model User {
   events           PatternEvent[]
 
   // Chat relations
-  chatMessages     ChatMessage[]      @relation("ChatMessages")
-  chatPresence     ChatPresence?
-  sentMessages     DirectMessage[]    @relation("SentMessages")
-  receivedMessages DirectMessage[]    @relation("ReceivedMessages")
+  chatMessages       ChatMessage[]        @relation("ChatMessages")
+  chatPresence       ChatPresence?
+  sentMessages       DirectMessage[]      @relation("SentMessages")
+  receivedMessages   DirectMessage[]      @relation("ReceivedMessages")
+  createdChannels    ChatChannel[]        @relation("ChannelCreator")
+  channelMemberships ChatChannelMember[]
+  messageReactions   MessageReaction[]
+  messageMentions    MessageMention[]
+  messageReads       MessageRead[]
+  typingIndicators   TypingIndicator[]
+  chatNotifications  ChatNotification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -330,12 +337,62 @@ model PatternEvent {
 }
 
 // ============================================================================
-// CHAT SYSTEM
+// CHAT SYSTEM - Production Grade with Full Features
 // ============================================================================
 
+// Chat Channels (Group Chats)
+model ChatChannel {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   @default("public") // public, private
+  icon        String?  // emoji or URL
+
+  // Created by
+  createdById String
+  createdBy   User     @relation("ChannelCreator", fields: [createdById], references: [id])
+
+  // Settings
+  isDefault   Boolean  @default(false) // Default channels everyone can see
+  archived    Boolean  @default(false)
+
+  // Relations
+  messages    ChatMessage[]
+  members     ChatChannelMember[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Channel Membership with Roles
+model ChatChannelMember {
+  id          String   @id @default(cuid())
+  channelId   String
+  userId      String
+  role        String   @default("member") // admin, moderator, member
+
+  // Notifications
+  muted       Boolean  @default(false)
+  lastReadAt  DateTime @default(now())
+
+  // Relations
+  channel     ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt    DateTime @default(now())
+
+  @@unique([channelId, userId])
+  @@index([userId])
+}
+
+// Chat Messages (enhanced)
 model ChatMessage {
   id          String   @id @default(cuid())
   userId      String
+  channelId   String?  // null for global/public chat
   content     String   @db.Text
 
   // Denormalized for performance (avoid joins on every message)
@@ -343,32 +400,159 @@ model ChatMessage {
   userAvatar  String?
   isVip       Boolean  @default(false)
 
-  // Optional image attachment
-  imageUrl    String?
+  // Attachments (multiple files supported)
+  attachments Json?    // [{url, type, name, size}]
 
   // Reply support
   replyToId   String?
   replyTo     ChatMessage?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies     ChatMessage[] @relation("MessageReplies")
 
-  // Reactions stored as JSON: { "👍": ["userId1", "userId2"], "❤️": ["userId3"] }
-  reactions   Json?
+  // Editing
+  edited      Boolean  @default(false)
+  editedAt    DateTime?
+
+  // Pinned message
+  pinned      Boolean  @default(false)
+  pinnedById  String?
 
   // Soft delete
   deleted     Boolean  @default(false)
   deletedAt   DateTime?
 
   // Relations
-  user        User     @relation("ChatMessages", fields: [userId], references: [id], onDelete: Cascade)
+  user        User           @relation("ChatMessages", fields: [userId], references: [id], onDelete: Cascade)
+  channel     ChatChannel?   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  reactions   MessageReaction[]
+  mentions    MessageMention[]
+  readReceipts MessageRead[]
+  editHistory MessageEdit[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([channelId, createdAt])
   @@index([createdAt])
   @@index([userId])
   @@index([replyToId])
+  @@index([pinned])
 }
 
+// Separate Reaction Table for Better Tracking
+model MessageReaction {
+  id          String   @id @default(cuid())
+  messageId   String
+  userId      String
+  emoji       String   // 👍, ❤️, 😂, 😮, 😢, 🔥, 🚀, 💯
+
+  // Relations
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
+}
+
+// @Mentions for Notifications
+model MessageMention {
+  id          String   @id @default(cuid())
+  messageId   String
+  userId      String   // User being mentioned
+
+  // Relations
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+// Message Read Receipts
+model MessageRead {
+  id          String   @id @default(cuid())
+  messageId   String
+  userId      String
+
+  // Relations
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  readAt      DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+// Message Edit History
+model MessageEdit {
+  id          String   @id @default(cuid())
+  messageId   String
+  previousContent String @db.Text
+
+  // Relations
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  editedAt    DateTime @default(now())
+
+  @@index([messageId])
+}
+
+// Typing Indicators
+model TypingIndicator {
+  id          String   @id @default(cuid())
+  userId      String
+  channelId   String?  // null for global chat, or DM recipientId
+  dmUserId    String?  // For DM typing - the recipient user ID
+
+  // Denormalized
+  userName    String
+  userAvatar  String?
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startedAt   DateTime @default(now())
+
+  @@unique([userId, channelId])
+  @@index([channelId])
+  @@index([dmUserId])
+}
+
+// Notifications System
+model ChatNotification {
+  id          String   @id @default(cuid())
+  userId      String   // Recipient
+  type        String   // mention, reply, dm, channel_invite
+
+  // Related entities
+  messageId   String?
+  channelId   String?
+  senderId    String?  // Who triggered the notification
+
+  // Content preview
+  title       String
+  body        String   @db.Text
+  link        String?  // URL to navigate to
+
+  // Status
+  read        Boolean  @default(false)
+  readAt      DateTime?
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+// Chat Presence (enhanced)
 model ChatPresence {
   id          String   @id @default(cuid())
   userId      String   @unique
@@ -378,9 +562,13 @@ model ChatPresence {
   userAvatar  String?
   isVip       Boolean  @default(false)
 
-  // Status
-  status      String   @default("online") // online, away, offline
+  // Status: online, away, busy, offline
+  status      String   @default("online")
+  customStatus String? // "In a meeting", "Out for lunch"
+
+  // Activity tracking
   lastSeen    DateTime @default(now())
+  lastActive  DateTime @default(now()) // Last message/reaction
 
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -389,6 +577,7 @@ model ChatPresence {
   @@index([lastSeen])
 }
 
+// Direct Messages (enhanced)
 model DirectMessage {
   id          String   @id @default(cuid())
 
@@ -398,7 +587,16 @@ model DirectMessage {
 
   // Content
   content     String   @db.Text
-  imageUrl    String?
+  attachments Json?    // [{url, type, name, size}]
+
+  // Reply support
+  replyToId   String?
+  replyTo     DirectMessage?  @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies     DirectMessage[] @relation("DMReplies")
+
+  // Editing
+  edited      Boolean  @default(false)
+  editedAt    DateTime?
 
   // Read status
   read        Boolean  @default(false)
@@ -413,8 +611,10 @@ model DirectMessage {
   receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([senderId, receiverId, createdAt])
   @@index([receiverId, read])
   @@index([createdAt])
+  @@index([replyToId])
 }
