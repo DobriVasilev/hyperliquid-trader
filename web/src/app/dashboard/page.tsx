@@ -206,12 +206,20 @@ function ShareModal({
           <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
             People with access
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {/* Owner */}
             <div className="flex items-center gap-3 py-2">
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
-                {session.createdBy?.name?.charAt(0) || "U"}
-              </div>
+              {session.createdBy?.image ? (
+                <img
+                  src={session.createdBy.image}
+                  alt={session.createdBy.name || ""}
+                  className="w-8 h-8 rounded-full"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                  {session.createdBy?.name?.charAt(0) || "U"}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-white truncate">
                   {session.createdBy?.name || "Unknown"} <span className="text-gray-500">(you)</span>
@@ -227,9 +235,13 @@ function ShareModal({
             ) : (
               sharedUsers.map(user => (
                 <div key={user.id} className="flex items-center gap-3 py-2 group">
-                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-medium">
-                    {user.name?.charAt(0) || user.email?.charAt(0) || "?"}
-                  </div>
+                  {user.image ? (
+                    <img src={user.image} alt={user.name || ""} className="w-8 h-8 rounded-full" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-medium">
+                      {user.name?.charAt(0) || user.email?.charAt(0) || "?"}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-white truncate">{user.name || user.email}</div>
                     <div className="text-xs text-gray-500 truncate">{user.email}</div>
@@ -267,13 +279,15 @@ function ShareModal({
               )}
             </div>
             <div className="flex-1">
-              <button
-                onClick={() => setIsPublic(!isPublic)}
-                className="text-sm text-white hover:underline text-left"
+              <select
+                value={isPublic ? "public" : "restricted"}
+                onChange={(e) => setIsPublic(e.target.value === "public")}
+                className="bg-transparent text-sm text-white border-none focus:outline-none focus:ring-0 cursor-pointer hover:bg-gray-800 rounded px-2 py-1 -ml-2"
               >
-                {isPublic ? "Anyone with the link" : "Restricted"}
-              </button>
-              <div className="text-xs text-gray-500">
+                <option value="restricted" className="bg-gray-900">Restricted</option>
+                <option value="public" className="bg-gray-900">Anyone with the link</option>
+              </select>
+              <div className="text-xs text-gray-500 ml-0.5">
                 {isPublic ? "Anyone with the link can view" : "Only people with access can open"}
               </div>
             </div>

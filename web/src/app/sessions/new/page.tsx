@@ -97,11 +97,7 @@ export default function NewSessionPage() {
       await fetch(`/api/sessions/${data.data.id}/detections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patternType,
-          patternSettings,
-          candleData: { candles },
-        }),
+        body: JSON.stringify({ action: "run_detection" }),
       });
 
       // Redirect to the new session
