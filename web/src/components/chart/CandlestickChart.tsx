@@ -9,7 +9,6 @@ import {
   Time,
   SeriesMarker,
   ColorType,
-  CrosshairMode,
 } from "lightweight-charts";
 
 export interface ChartCandle {
@@ -36,6 +35,8 @@ interface CandlestickChartProps {
   onCandleClick?: (candle: ChartCandle, index: number) => void;
   onMarkerClick?: (marker: ChartMarker) => void;
   onChartClick?: (time: number, price: number) => void;
+  onMarkerDrag?: (marker: ChartMarker, newTime: number, newPrice: number) => void;
+  onMarkerContextMenu?: (marker: ChartMarker, x: number, y: number) => void;
   height?: number;
   className?: string;
 }
@@ -46,6 +47,8 @@ export function CandlestickChart({
   onCandleClick,
   onMarkerClick,
   onChartClick,
+  onMarkerDrag,
+  onMarkerContextMenu,
   height = 500,
   className = "",
 }: CandlestickChartProps) {
@@ -61,6 +64,10 @@ export function CandlestickChart({
     color: string;
   } | null>(null);
   const [isModifierHeld, setIsModifierHeld] = useState(false);
+
+  // Drag state
+  const [draggingMarker, setDraggingMarker] = useState<ChartMarker | null>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Initialize chart
   useEffect(() => {
@@ -96,6 +103,7 @@ export function CandlestickChart({
           top: 0.1,
           bottom: 0.1,
         },
+        autoScale: true,
       },
       timeScale: {
         borderColor: "#2a2a4a",
@@ -210,8 +218,9 @@ export function CandlestickChart({
     if (!chartRef.current || !candleSeriesRef.current) return;
 
     const chart = chartRef.current;
+    const series = candleSeriesRef.current;
 
-    const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number } }) => {
+    const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number }; seriesData?: Map<unknown, unknown> }) => {
       if (!isModifierHeld || !param.time || !param.point) {
         setSnapIndicator(null);
         return;
@@ -226,7 +235,7 @@ export function CandlestickChart({
 
       // Get mouse Y coordinate and find closest price level
       const y = param.point.y;
-      const hoveredPrice = candleSeriesRef.current?.coordinateToPrice(y);
+      const hoveredPrice = series.coordinateToPrice(y);
       if (hoveredPrice === null || hoveredPrice === undefined) {
         setSnapIndicator(null);
         return;
@@ -240,10 +249,10 @@ export function CandlestickChart({
       ];
 
       const closest = priceLevels.reduce((best, level) =>
-        Math.abs(level.price - hoveredPrice) < Math.abs(best.price - hoveredPrice) ? level : best
+        Math.abs(level.price - (hoveredPrice as number)) < Math.abs(best.price - (hoveredPrice as number)) ? level : best
       );
 
-      const snapY = candleSeriesRef.current?.priceToCoordinate(closest.price);
+      const snapY = series.priceToCoordinate(closest.price);
       if (snapY !== null && snapY !== undefined) {
         setSnapIndicator({
           price: closest.price,
@@ -261,77 +270,132 @@ export function CandlestickChart({
     };
   }, [candles, isModifierHeld]);
 
-  // Handle wheel events on price/time scales
-  // Scrolling on price scale = zoom price only
-  // Scrolling on time scale = zoom time only
-  // Scrolling elsewhere = zoom both (default)
-  useEffect(() => {
-    if (!containerRef.current || !chartRef.current) return;
+  // Find marker at position
+  const findMarkerAtPosition = useCallback((x: number, y: number): ChartMarker | null => {
+    if (!chartRef.current || !candleSeriesRef.current) return null;
 
-    const container = containerRef.current;
-    const chart = chartRef.current;
+    const timeScale = chartRef.current.timeScale();
 
-    const handleWheel = (e: WheelEvent) => {
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+    for (const marker of markers) {
+      const markerX = timeScale.timeToCoordinate(marker.time as Time);
+      if (markerX === null) continue;
 
-      const priceScaleWidth = 60; // Approximate width of price scale
-      const timeScaleHeight = 30; // Approximate height of time scale
-      const chartWidth = rect.width;
-      const chartHeight = rect.height;
+      // X must be close (within 20px)
+      if (Math.abs(markerX - x) > 20) continue;
 
-      // Check if cursor is over price scale (right side)
-      if (x > chartWidth - priceScaleWidth) {
-        e.preventDefault();
-        const scaleFactor = e.deltaY > 0 ? 1.1 : 0.9;
-        const priceScale = chart.priceScale("right");
-        const options = priceScale.options();
-        const currentTop = options.scaleMargins?.top ?? 0.1;
-        const currentBottom = options.scaleMargins?.bottom ?? 0.1;
+      // Get the marker's candle to check vertical position
+      const markerCandle = candles.find(c => c.time === marker.time);
+      if (!markerCandle) continue;
 
-        // Adjust margins to zoom price scale
-        const newMargin = Math.max(0.01, Math.min(0.4,
-          e.deltaY > 0
-            ? currentTop * scaleFactor
-            : currentTop / scaleFactor
-        ));
-
-        priceScale.applyOptions({
-          scaleMargins: { top: newMargin, bottom: newMargin }
-        });
-        return;
+      // Calculate marker's Y coordinate based on position
+      let markerPrice: number;
+      if (marker.position === "aboveBar") {
+        markerPrice = markerCandle.high;
+      } else if (marker.position === "belowBar") {
+        markerPrice = markerCandle.low;
+      } else {
+        markerPrice = (markerCandle.high + markerCandle.low) / 2;
       }
 
-      // Check if cursor is over time scale (bottom)
-      if (y > chartHeight - timeScaleHeight) {
-        e.preventDefault();
-        const timeScale = chart.timeScale();
-        const visibleRange = timeScale.getVisibleLogicalRange();
-        if (visibleRange) {
-          const center = (visibleRange.from + visibleRange.to) / 2;
-          const range = visibleRange.to - visibleRange.from;
-          const scaleFactor = e.deltaY > 0 ? 1.2 : 0.8;
-          const newRange = range * scaleFactor;
-          const newFrom = center - newRange / 2;
-          const newTo = center + newRange / 2;
-          timeScale.setVisibleLogicalRange({ from: newFrom, to: newTo });
+      const markerY = candleSeriesRef.current.priceToCoordinate(markerPrice);
+      if (markerY === null || markerY === undefined) continue;
+
+      // Y must also be close (within 30px for marker area)
+      if (Math.abs(markerY - y) < 30) {
+        return marker;
+      }
+    }
+
+    return null;
+  }, [candles, markers]);
+
+  // Handle mouse down for drag start
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current || !onMarkerDrag) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const marker = findMarkerAtPosition(x, y);
+    if (marker) {
+      event.preventDefault();
+      setDraggingMarker(marker);
+      setDragPosition({ x, y });
+    }
+  }, [findMarkerAtPosition, onMarkerDrag]);
+
+  // Handle mouse move for dragging
+  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!draggingMarker || !containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    setDragPosition({ x, y });
+  }, [draggingMarker]);
+
+  // Handle mouse up for drag end
+  const handleMouseUp = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!draggingMarker || !dragPosition || !chartRef.current || !candleSeriesRef.current || !onMarkerDrag) {
+      setDraggingMarker(null);
+      setDragPosition(null);
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    // Get new time and price
+    const timeScale = chartRef.current.timeScale();
+    const newTime = timeScale.coordinateToTime(x);
+    let newPrice = candleSeriesRef.current.coordinateToPrice(y);
+
+    if (newTime !== null && newPrice !== null) {
+      // Snap to candle level if modifier held
+      let finalPrice = newPrice as number;
+      if (isModifierHeld) {
+        const candle = candles.find(c => c.time === newTime);
+        if (candle) {
+          const priceLevels = [candle.high, candle.low, candle.open, candle.close];
+          finalPrice = priceLevels.reduce((closest, level) =>
+            Math.abs(level - finalPrice) < Math.abs(closest - finalPrice) ? level : closest
+          );
         }
-        return;
       }
 
-      // Default: let lightweight-charts handle it (zooms both)
-    };
+      onMarkerDrag(draggingMarker, newTime as number, finalPrice);
+    }
 
-    container.addEventListener("wheel", handleWheel, { passive: false });
-    return () => container.removeEventListener("wheel", handleWheel);
-  }, []);
+    setDraggingMarker(null);
+    setDragPosition(null);
+  }, [draggingMarker, dragPosition, candles, isModifierHeld, onMarkerDrag]);
+
+  // Handle context menu (right-click)
+  const handleContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current || !onMarkerContextMenu) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const marker = findMarkerAtPosition(x, y);
+    if (marker) {
+      event.preventDefault();
+      onMarkerContextMenu(marker, event.clientX, event.clientY);
+    }
+  }, [findMarkerAtPosition, onMarkerContextMenu]);
 
   // Handle click events
-  // By default: free price selection (exact cursor position)
-  // With Cmd/Ctrl held: snap to nearest candle level (high, low, open, close)
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
+      // Don't handle click if we just finished dragging
+      if (draggingMarker) return;
+
       if (!chartRef.current || !candleSeriesRef.current) return;
 
       const rect = containerRef.current?.getBoundingClientRect();
@@ -339,7 +403,7 @@ export function CandlestickChart({
 
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
-      const shouldSnap = event.metaKey || event.ctrlKey; // Cmd on Mac, Ctrl on Windows
+      const shouldSnap = event.metaKey || event.ctrlKey;
 
       // Get time and price from coordinates
       const timeScale = chartRef.current.timeScale();
@@ -351,35 +415,8 @@ export function CandlestickChart({
         const candleIndex = candles.findIndex((c) => c.time === time);
         const candle = candleIndex !== -1 ? candles[candleIndex] : null;
 
-        // Find if we clicked on a marker - check BOTH X and Y position
-        const clickedMarker = markers.find((m) => {
-          const markerX = timeScale.timeToCoordinate(m.time as Time);
-          if (markerX === null) return false;
-
-          // X must be close (within 15px)
-          if (Math.abs(markerX - x) > 15) return false;
-
-          // Also check Y position - marker must be near the click
-          // Get the marker's candle to check vertical position
-          const markerCandle = candles.find(c => c.time === m.time);
-          if (!markerCandle) return false;
-
-          // Calculate marker's Y coordinate based on position
-          let markerPrice: number;
-          if (m.position === "aboveBar") {
-            markerPrice = markerCandle.high;
-          } else if (m.position === "belowBar") {
-            markerPrice = markerCandle.low;
-          } else {
-            markerPrice = (markerCandle.high + markerCandle.low) / 2;
-          }
-
-          const markerY = candleSeriesRef.current?.priceToCoordinate(markerPrice);
-          if (markerY === null || markerY === undefined) return false;
-
-          // Y must also be close (within 25px for marker area)
-          return Math.abs(markerY - y) < 25;
-        });
+        // Check if clicked on a marker
+        const clickedMarker = findMarkerAtPosition(x, y);
 
         if (clickedMarker && onMarkerClick) {
           onMarkerClick(clickedMarker);
@@ -438,16 +475,26 @@ export function CandlestickChart({
         }
       }
     },
-    [candles, markers, onCandleClick, onMarkerClick, onChartClick]
+    [candles, draggingMarker, findMarkerAtPosition, onCandleClick, onMarkerClick, onChartClick]
   );
 
   return (
     <div className="relative">
       <div
         ref={containerRef}
-        className={`w-full ${className}`}
+        className={`w-full ${className} ${draggingMarker ? "cursor-grabbing" : ""}`}
         style={{ height }}
         onClick={handleClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          if (draggingMarker) {
+            setDraggingMarker(null);
+            setDragPosition(null);
+          }
+        }}
+        onContextMenu={handleContextMenu}
       />
 
       {/* Snap indicator overlay */}
@@ -458,16 +505,17 @@ export function CandlestickChart({
             className="absolute left-0 right-16 pointer-events-none"
             style={{
               top: snapIndicator.y,
-              height: 1,
+              height: 2,
               backgroundColor: snapIndicator.color,
-              opacity: 0.8,
+              opacity: 0.9,
+              boxShadow: `0 0 8px ${snapIndicator.color}`,
             }}
           />
           {/* Snap level label */}
           <div
-            className="absolute right-16 pointer-events-none px-1.5 py-0.5 text-xs font-mono rounded"
+            className="absolute right-16 pointer-events-none px-2 py-1 text-xs font-mono font-bold rounded shadow-lg"
             style={{
-              top: snapIndicator.y - 10,
+              top: snapIndicator.y - 12,
               backgroundColor: snapIndicator.color,
               color: snapIndicator.color === "#ffffff" ? "#000" : "#fff",
             }}
@@ -475,10 +523,27 @@ export function CandlestickChart({
             {snapIndicator.level} ${snapIndicator.price.toFixed(2)}
           </div>
           {/* Snap mode indicator */}
-          <div className="absolute top-2 left-2 px-2 py-1 bg-blue-600/80 rounded text-xs text-white font-medium pointer-events-none">
-            SNAP MODE (Cmd/Ctrl)
+          <div className="absolute top-2 left-2 px-2 py-1 bg-blue-600 rounded text-xs text-white font-medium pointer-events-none shadow-lg">
+            MAGNET MODE
           </div>
         </>
+      )}
+
+      {/* Drag indicator */}
+      {draggingMarker && dragPosition && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: dragPosition.x - 10,
+            top: dragPosition.y - 10,
+            width: 20,
+            height: 20,
+            backgroundColor: draggingMarker.color,
+            borderRadius: "50%",
+            opacity: 0.8,
+            boxShadow: `0 0 10px ${draggingMarker.color}`,
+          }}
+        />
       )}
     </div>
   );

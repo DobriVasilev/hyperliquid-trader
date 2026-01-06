@@ -8,6 +8,7 @@ import { useCandles } from "@/hooks/useCandles";
 import { useRealtime } from "@/hooks/useRealtime";
 import { CandlestickChart, ChartCandle, ChartMarker } from "@/components/chart/CandlestickChart";
 import { ChartToolbar, ChartTool } from "@/components/chart/ChartToolbar";
+import { ContextMenu } from "@/components/chart/ContextMenu";
 import { CorrectionModal, CorrectionData } from "@/components/corrections";
 import { CommentInput, CommentThread } from "@/components/comments";
 import { OnlineUsers, CursorOverlay } from "@/components/realtime";
@@ -78,6 +79,13 @@ export default function SessionDetailPage({
 
   // Chart tool state - like TradingView drawing tools
   const [activeTool, setActiveTool] = useState<ChartTool>("select");
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    marker: ChartMarker;
+  } | null>(null);
 
   // Keyboard shortcuts for tools
   useEffect(() => {
@@ -261,6 +269,42 @@ export default function SessionDetailPage({
       throw err;
     }
   };
+
+  // Handle drag-and-drop for markers
+  const handleMarkerDrag = useCallback(async (marker: ChartMarker, newTime: number, newPrice: number) => {
+    const detection = session?.detections.find((d) => d.id === marker.id);
+    if (!detection) return;
+
+    // Find the candle index for the new position
+    const candleIndex = candles.findIndex((c) => c.time === newTime);
+    if (candleIndex === -1) return;
+
+    // Submit the move correction directly (without modal for drag)
+    try {
+      const correctionData: CorrectionData = {
+        correctionType: "move",
+        reason: "Dragged to new position",
+        detectionId: detection.id,
+        originalIndex: detection.candleIndex,
+        originalTime: new Date(detection.candleTime).getTime(),
+        originalPrice: detection.price,
+        originalType: detection.detectionType,
+        correctedIndex: candleIndex,
+        correctedTime: newTime * 1000,
+        correctedPrice: newPrice,
+        correctedType: detection.detectionType,
+      };
+
+      await handleCorrectionSubmit(correctionData);
+    } catch (err) {
+      console.error("Error moving detection:", err);
+    }
+  }, [session?.detections, candles]);
+
+  // Handle right-click context menu on markers
+  const handleMarkerContextMenu = useCallback((marker: ChartMarker, x: number, y: number) => {
+    setContextMenu({ x, y, marker });
+  }, []);
 
   const openCorrectionModal = (mode: "delete" | "move" | "add" | "confirm", detection?: PatternDetection) => {
     // Move mode: don't open modal yet - wait for user to click new position
@@ -532,6 +576,8 @@ export default function SessionDetailPage({
                 onCandleClick={handleCandleClick}
                 onMarkerClick={handleMarkerClick}
                 onChartClick={handleChartClick}
+                onMarkerDrag={handleMarkerDrag}
+                onMarkerContextMenu={handleMarkerContextMenu}
                 height={600}
               />
               {/* Cursor overlay for collaborative editing */}
@@ -731,6 +777,61 @@ export default function SessionDetailPage({
         moveTargetData={moveTargetData || undefined}
         autoDetectionType={autoDetectionType}
       />
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              label: "Confirm",
+              variant: "success",
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ),
+              onClick: () => {
+                const detection = session?.detections.find((d) => d.id === contextMenu.marker.id);
+                if (detection) {
+                  openCorrectionModal("confirm", detection);
+                }
+              },
+            },
+            {
+              label: "Move",
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+              ),
+              onClick: () => {
+                const detection = session?.detections.find((d) => d.id === contextMenu.marker.id);
+                if (detection) {
+                  openCorrectionModal("move", detection);
+                }
+              },
+            },
+            {
+              label: "Delete",
+              variant: "danger",
+              icon: (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              ),
+              onClick: () => {
+                const detection = session?.detections.find((d) => d.id === contextMenu.marker.id);
+                if (detection) {
+                  openCorrectionModal("delete", detection);
+                }
+              },
+            },
+          ]}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </main>
   );
 }

@@ -95,7 +95,7 @@ export function CorrectionModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason.trim()) return;
+    // Reason is now optional
 
     setIsSubmitting(true);
     try {
@@ -353,11 +353,11 @@ export function CorrectionModal({
               </div>
             )}
 
-            {/* Reason - only show when action selected (not in pure options mode) */}
+            {/* Reason - optional, show when action selected */}
             {(!showOptionsUI || internalMode === "confirm" || internalMode === "delete") && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Reason <span className="text-red-400">*</span>
+                  Reason <span className="text-gray-500 text-xs">(optional)</span>
                 </label>
                 <textarea
                   value={reason}
@@ -375,10 +375,9 @@ export function CorrectionModal({
                            text-white placeholder-gray-500 focus:outline-none focus:border-blue-500
                            resize-none"
                   rows={3}
-                  required
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  This helps improve the detection algorithm.
+                  Optional - helps improve the detection algorithm.
                 </p>
               </div>
             )}
@@ -394,11 +393,11 @@ export function CorrectionModal({
             >
               Cancel
             </button>
-            {/* Only show submit button when action is selected and we have reason */}
+            {/* Only show submit button when action is selected */}
             {(!showOptionsUI || internalMode === "confirm" || internalMode === "delete") && (
               <button
                 type="submit"
-                disabled={isSubmitting || !reason.trim()}
+                disabled={isSubmitting}
                 className={`px-4 py-2 text-white rounded-lg font-medium transition-colors
                          disabled:opacity-50 flex items-center gap-2 ${getModeColor()}`}
               >
