@@ -108,10 +108,14 @@ export function useSession(sessionId: string): UseSessionResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSession = useCallback(async () => {
+  const fetchSession = useCallback(async (isInitialLoad = false) => {
     if (!sessionId) return;
 
-    setIsLoading(true);
+    // Only show loading spinner on initial load, not on refetch
+    // This prevents the chart from unmounting and losing position
+    if (isInitialLoad) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -158,7 +162,7 @@ export function useSession(sessionId: string): UseSessionResult {
   );
 
   useEffect(() => {
-    fetchSession();
+    fetchSession(true); // Initial load - show loading spinner
   }, [fetchSession]);
 
   return {
