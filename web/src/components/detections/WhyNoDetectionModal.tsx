@@ -178,43 +178,50 @@ export function WhyNoDetectionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+    <>
+      {/* Backdrop - click to close */}
+      <div
+        className="fixed inset-0 z-40 bg-black/30"
+        onClick={onClose}
+      />
+
+      {/* Slide-out panel on right side */}
+      <div className="fixed top-0 right-0 z-50 h-full w-[420px] bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col animate-slide-in-right">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-          <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Why No Detection?
-            </h2>
-            {evaluation && (
-              <p className="text-sm text-gray-400 mt-1">
-                Candle #{candleIndex} • {formatTime(evaluation.candle.time)}
-              </p>
-            )}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-800/50">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h2 className="text-sm font-semibold">Why No Detection?</h2>
+              {evaluation && (
+                <p className="text-xs text-gray-400">
+                  Candle #{candleIndex} • {formatTime(evaluation.candle.time)}
+                </p>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4">
           {isLoading && (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin w-8 h-8 border-2 border-gray-600 border-t-blue-500 rounded-full" />
+              <div className="animate-spin w-6 h-6 border-2 border-gray-600 border-t-blue-500 rounded-full" />
             </div>
           )}
 
           {error && (
-            <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 text-red-300">
+            <div className="bg-red-900/20 border border-red-700 rounded-lg p-3 text-red-300 text-sm">
               {error}
             </div>
           )}
@@ -223,47 +230,47 @@ export function WhyNoDetectionModal({
             <>
               {/* Existing detection notice */}
               {evaluation.existingDetection && (
-                <div className="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-2 text-green-300">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-green-900/20 border border-green-700 rounded-lg p-3 mb-3">
+                  <div className="flex items-center gap-2 text-green-300 text-sm">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     <span className="font-medium">Detection Exists</span>
                   </div>
-                  <p className="text-sm text-gray-300 mt-1">
+                  <p className="text-xs text-gray-300 mt-1">
                     This candle has a {evaluation.existingDetection.type.replace("_", " ")} detection at ${evaluation.existingDetection.price.toFixed(2)}
                   </p>
                 </div>
               )}
 
-              {/* Candle info */}
-              <div className="bg-gray-800/50 rounded-lg p-4 mb-4">
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Candle Data</h3>
-                <div className="grid grid-cols-4 gap-4 text-sm">
-                  <div>
+              {/* Candle info - compact grid */}
+              <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
+                <h3 className="text-xs font-medium text-gray-400 mb-2">Candle Data</h3>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between">
                     <span className="text-gray-500">Open:</span>
-                    <span className="ml-2 font-mono">${evaluation.candle.open.toFixed(2)}</span>
+                    <span className="font-mono">${evaluation.candle.open.toFixed(2)}</span>
                   </div>
-                  <div>
+                  <div className="flex justify-between">
                     <span className="text-gray-500">High:</span>
-                    <span className="ml-2 font-mono text-red-400">${evaluation.candle.high.toFixed(2)}</span>
+                    <span className="font-mono text-red-400">${evaluation.candle.high.toFixed(2)}</span>
                   </div>
-                  <div>
+                  <div className="flex justify-between">
                     <span className="text-gray-500">Low:</span>
-                    <span className="ml-2 font-mono text-green-400">${evaluation.candle.low.toFixed(2)}</span>
+                    <span className="font-mono text-green-400">${evaluation.candle.low.toFixed(2)}</span>
                   </div>
-                  <div>
+                  <div className="flex justify-between">
                     <span className="text-gray-500">Close:</span>
-                    <span className="ml-2 font-mono">${evaluation.candle.close.toFixed(2)}</span>
+                    <span className="font-mono">${evaluation.candle.close.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Tabs */}
-              <div className="flex border-b border-gray-700 mb-4">
+              <div className="flex border-b border-gray-700 mb-3">
                 <button
                   onClick={() => setActiveTab("high")}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                     activeTab === "high"
                       ? "text-red-400 border-b-2 border-red-400"
                       : "text-gray-400 hover:text-gray-200"
@@ -271,14 +278,14 @@ export function WhyNoDetectionModal({
                 >
                   Swing High
                   {evaluation.swingHighEvaluation.isPivot && (
-                    <span className="ml-2 text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">
+                    <span className="ml-1.5 text-[10px] bg-red-900/50 text-red-300 px-1 py-0.5 rounded">
                       PIVOT
                     </span>
                   )}
                 </button>
                 <button
                   onClick={() => setActiveTab("low")}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                     activeTab === "low"
                       ? "text-green-400 border-b-2 border-green-400"
                       : "text-gray-400 hover:text-gray-200"
@@ -286,7 +293,7 @@ export function WhyNoDetectionModal({
                 >
                   Swing Low
                   {evaluation.swingLowEvaluation.isPivot && (
-                    <span className="ml-2 text-xs bg-green-900/50 text-green-300 px-1.5 py-0.5 rounded">
+                    <span className="ml-1.5 text-[10px] bg-green-900/50 text-green-300 px-1 py-0.5 rounded">
                       PIVOT
                     </span>
                   )}
@@ -302,20 +309,27 @@ export function WhyNoDetectionModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500">
-              Mode: {mode === "wicks" ? "Wicks (High/Low)" : "Candle Bodies (Close)"} • Lookback: 3 candles
-            </p>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              Close
-            </button>
-          </div>
+        <div className="px-4 py-3 border-t border-gray-700 bg-gray-800/50">
+          <p className="text-[10px] text-gray-500 text-center">
+            Mode: {mode === "wicks" ? "Wicks" : "Closes"} • Lookback: 3 candles
+          </p>
         </div>
       </div>
-    </div>
+
+      {/* CSS for slide-in animation */}
+      <style jsx>{`
+        @keyframes slide-in-right {
+          from {
+            transform: translateX(100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        .animate-slide-in-right {
+          animation: slide-in-right 0.2s ease-out;
+        }
+      `}</style>
+    </>
   );
 }
