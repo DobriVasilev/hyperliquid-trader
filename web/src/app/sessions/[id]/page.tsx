@@ -813,6 +813,16 @@ export default function SessionDetailPage({
             </span>
           </nav>
           <div className="flex items-center gap-3">
+            {/* Admin Link */}
+            {authSession?.user?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="px-2 py-1 text-xs bg-red-900/50 text-red-300 rounded hover:bg-red-800/50 transition-colors"
+              >
+                Admin
+              </Link>
+            )}
+
             {/* Online Users */}
             <OnlineUsers users={onlineUsers} isConnected={isConnected} />
 

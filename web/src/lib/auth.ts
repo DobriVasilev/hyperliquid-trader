@@ -65,18 +65,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         token.id = user.id;
+        // Fetch user role from database
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { role: true },
+        });
+        token.role = dbUser?.role || "user";
       }
       if (account) {
         token.provider = account.provider;
+      }
+      // Refresh role on session update
+      if (trigger === "update" && token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true },
+        });
+        token.role = dbUser?.role || "user";
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.id) {
         session.user.id = token.id as string;
+        session.user.role = (token.role as string) || "user";
       }
       return session;
     },
@@ -91,6 +106,7 @@ declare module "next-auth" {
       email: string;
       name?: string | null;
       image?: string | null;
+      role?: string;
     };
   }
 }
@@ -99,5 +115,6 @@ declare module "@auth/core/jwt" {
   interface JWT {
     id?: string;
     provider?: string;
+    role?: string;
   }
 }
