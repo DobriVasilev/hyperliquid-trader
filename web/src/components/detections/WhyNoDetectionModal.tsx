@@ -179,14 +179,8 @@ export function WhyNoDetectionModal({
 
   return (
     <>
-      {/* Backdrop - click to close */}
-      <div
-        className="fixed inset-0 z-40 bg-black/30"
-        onClick={onClose}
-      />
-
-      {/* Slide-out panel on right side */}
-      <div className="fixed top-0 right-0 z-50 h-full w-[420px] bg-gray-900 border-l border-gray-700 shadow-2xl flex flex-col animate-slide-in-right">
+      {/* Slide-out sidebar on right side - no backdrop to allow chart interaction */}
+      <div className="fixed top-0 right-0 z-40 h-full w-[380px] bg-gray-900/95 backdrop-blur-sm border-l border-gray-700 shadow-2xl flex flex-col animate-slide-in-right pointer-events-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-800/50">
           <div className="flex items-center gap-2">
