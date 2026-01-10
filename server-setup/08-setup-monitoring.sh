@@ -40,7 +40,7 @@ echo ""
 
 # Service status
 echo "=== Service Status ==="
-services=("caddy" "trading-app" "postgresql" "wg-quick@wg0" "fail2ban")
+services=("caddy" "trading-app" "fail2ban")
 
 for service in "${services[@]}"; do
     if systemctl is-active --quiet "$service"; then
@@ -73,9 +73,19 @@ else
 fi
 echo ""
 
-# Database
-echo "=== Database ==="
-PGPASSWORD='change_this_password_in_production' psql -U trading_user -d trading_app -c "SELECT version();" > /dev/null 2>&1 && echo "✓ PostgreSQL accessible" || echo "✗ PostgreSQL not accessible"
+# Database (Neon)
+echo "=== Database (Neon) ==="
+APP_DIR="/home/dobri/systems-trader/web"
+if [ -f "${APP_DIR}/.env" ]; then
+    DATABASE_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ -n "${DATABASE_URL}" ]; then
+        psql "${DATABASE_URL}" -c "SELECT 1;" > /dev/null 2>&1 && echo "✓ Neon database accessible" || echo "✗ Neon database not accessible"
+    else
+        echo "✗ DATABASE_URL not found in .env"
+    fi
+else
+    echo "✗ .env file not found"
+fi
 echo ""
 
 # Recent errors (last hour)

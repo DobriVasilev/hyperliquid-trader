@@ -70,6 +70,11 @@ model User {
   friendsAsUser1         Friendship[]    @relation("FriendUser1")
   friendsAsUser2         Friendship[]    @relation("FriendUser2")
 
+  // Trading System
+  wallets                UserWallet[]
+  botConfigs             BotConfig[]
+  trades                 Trade[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -839,6 +844,127 @@ model SafetyNumber {
   updatedAt       DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
+}
+
+// ============================================================================
+// TRADING SYSTEM - Wallets, Bots, Trades
+// ============================================================================
+
+// User's encrypted wallets for trading
+model UserWallet {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  nickname      String   // "Main Account", "Bot Account", "Test Wallet"
+  address       String   // Public wallet address (for display)
+  encryptedKey  String   @db.Text // AES-256-GCM encrypted private key
+  salt          String   // Salt for key derivation (Argon2id)
+
+  // Metadata
+  isDefault     Boolean  @default(false) // Default wallet for manual trading
+  lastUsedAt    DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  bots          BotConfig[]
+  trades        Trade[]
+
+  @@unique([userId, address]) // Can't add same wallet twice
+  @@index([userId])
+}
+
+// Bot configurations for automated trading
+model BotConfig {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId      String
+  wallet        UserWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  name          String   // "BOS Breakout Bot", "Mean Reversion ETH"
+  symbol        String   // "BTC", "ETH", "SOL"
+  strategyType  String   // "bos-breakout", "mean-reversion", "75-retracement"
+
+  // Strategy parameters (JSON for flexibility)
+  parameters    Json     // Strategy-specific settings
+
+  // Risk management
+  riskSettings  Json     // { riskPerTrade: 1, maxDailyLoss: 5, leverage: 10, maxPositions: 3 }
+
+  // Status
+  status        String   @default("stopped") // "running", "stopped", "error", "paused"
+  statusMessage String?  // Error message or status details
+
+  // Execution tracking
+  lastRunAt     DateTime?
+  lastTradeAt   DateTime?
+  totalTrades   Int      @default(0)
+  winningTrades Int      @default(0)
+  losingTrades  Int      @default(0)
+  totalPnl      Float    @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  trades        Trade[]
+
+  @@index([userId, status])
+  @@index([walletId])
+}
+
+// Trade history (manual and bot trades)
+model Trade {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId      String
+  wallet        UserWallet @relation(fields: [walletId], references: [id])
+  botId         String?  // Null for manual trades
+  bot           BotConfig? @relation(fields: [botId], references: [id], onDelete: SetNull)
+
+  // Trade details
+  symbol        String   // "BTC", "ETH"
+  side          String   // "long" or "short"
+  size          Float    // Position size in base currency
+  leverage      Int      @default(1)
+
+  // Prices
+  entryPrice    Float
+  exitPrice     Float?
+  stopLoss      Float?
+  takeProfit    Float?
+
+  // P&L
+  pnl           Float?   // Realized P&L in USD
+  pnlPercent    Float?   // Percentage gain/loss
+  fees          Float?   // Trading fees paid
+
+  // Status
+  status        String   // "open", "closed", "cancelled", "liquidated"
+  closeReason   String?  // "tp_hit", "sl_hit", "manual", "liquidated", "bot_signal"
+
+  // Hyperliquid order IDs
+  entryOrderId  String?
+  exitOrderId   String?
+  slOrderId     String?
+  tpOrderId     String?
+
+  // Timestamps
+  openedAt      DateTime @default(now())
+  closedAt      DateTime?
+
+  // Metadata
+  metadata      Json?    // Additional trade data (signals, patterns, etc.)
+
+  @@index([userId, status])
+  @@index([walletId])
+  @@index([botId])
+  @@index([symbol])
+  @@index([openedAt])
 }
 
 // ============================================================================
