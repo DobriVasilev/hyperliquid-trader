@@ -99,9 +99,9 @@ if [ -n "${R2_ACCESS_KEY_ID:-}" ] && [ -n "${R2_SECRET_ACCESS_KEY:-}" ] && [ -n 
     export RCLONE_CONFIG_R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
     export RCLONE_CONFIG_R2_ACL=private
 
-    R2_BUCKET="${R2_BUCKET_NAME:-trading-app-backups}"
+    R2_BUCKET="${R2_BACKUP_BUCKET:-${R2_BUCKET_NAME:-trading-app-backups}}"
 
-    if rclone copy "${BACKUP_FILE}" "r2:${R2_BUCKET}/backups/" --progress; then
+    if rclone copy "${BACKUP_FILE}" "r2:${R2_BUCKET}/backups/" --s3-no-check-bucket --progress; then
         echo "R2 upload successful: r2:${R2_BUCKET}/backups/${BACKUP_FILENAME}"
 
         # Clean old R2 backups (keep last 30)
