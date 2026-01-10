@@ -43,8 +43,17 @@ trap "rm -rf ${TMP_DIR}" EXIT
 
 # Load environment variables from .env
 if [ -f "${APP_DIR}/.env" ]; then
-    # Source env vars (handle spaces and quotes)
-    export $(grep -v '^#' "${APP_DIR}/.env" | grep -v '^$' | sed 's/^[[:space:]]*//' | xargs)
+    # Read env vars line by line (handles special characters better)
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+        # Remove leading spaces and export
+        line=$(echo "$line" | sed 's/^[[:space:]]*//')
+        if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            export "$line"
+        fi
+    done < "${APP_DIR}/.env"
 else
     echo "ERROR: .env file not found"
     exit 1
@@ -55,12 +64,16 @@ if [ -z "${DATABASE_URL:-}" ]; then
     exit 1
 fi
 
-# Backup database from Neon
+# Backup database from Neon (use pg_dump 17 for Neon compatibility)
 echo "Backing up database from Neon..."
-if pg_dump "${DATABASE_URL}" -F c -f "${TMP_DIR}/database.dump" 2>/dev/null; then
+PG_DUMP="/usr/lib/postgresql/17/bin/pg_dump"
+if [ ! -x "$PG_DUMP" ]; then
+    PG_DUMP="pg_dump"  # Fallback to default
+fi
+if $PG_DUMP "${DATABASE_URL}" -F c -f "${TMP_DIR}/database.dump" 2>/dev/null; then
     echo "Database backup successful"
 else
-    echo "WARNING: Database backup failed (may need pg_dump installed)"
+    echo "WARNING: Database backup failed"
     echo "Continuing with config backup only..."
 fi
 
