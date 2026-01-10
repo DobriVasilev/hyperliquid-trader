@@ -294,10 +294,7 @@ export const HeroOdyssey: React.FC = () => {
                 </Link>
               </>
             ) : (
-              <>
-                <Link href="/auth/login" className="hidden md:block px-4 py-2 text-sm hover:text-gray-300 transition-colors">Sign In</Link>
-                <Link href="/sessions/new" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors">Get Started</Link>
-              </>
+              <Link href="/auth/login" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 backdrop-blur-sm rounded-full text-sm transition-colors">Get Started</Link>
             )}
             {/* Mobile menu button */}
             <button
@@ -344,10 +341,7 @@ export const HeroOdyssey: React.FC = () => {
                   Dashboard
                 </Link>
               ) : (
-                <>
-                  <Link href="/auth/login" className="px-6 py-3" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
-                  <Link href="/sessions/new" className="px-6 py-3 bg-blue-600 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
-                </>
+                <Link href="/auth/login" className="px-6 py-3 bg-blue-600 rounded-full" onClick={() => setMobileMenuOpen(false)}>Get Started</Link>
               )}
             </div>
           </motion.div>
