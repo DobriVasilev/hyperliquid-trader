@@ -50,7 +50,7 @@
 | Create /api/extension/execute | DONE | PNL-based trade execution |
 | Create /api/extension/keys | DONE | API key management |
 | Add ExtensionKey Prisma model | DONE | schema.prisma updated |
-| Update extension to use web | Pending | Change localhost:3456 to API |
+| Update extension to use web | DONE | v2.0.0 - uses web API with API key auth |
 
 ### Phase 6: Polish & Testing
 | Task | Status | Notes |
@@ -85,6 +85,12 @@
 - `/web/src/app/api/extension/execute/route.ts` - DONE - Trade execution from extension
 - `/web/src/app/api/extension/keys/route.ts` - DONE - API key management
 - `/web/prisma/schema.prisma` - UPDATED - Added ExtensionKey model
+
+### Chrome Extension (Updated v2.0.0)
+- `/extension/manifest.json` - UPDATED - v2.0.0 with storage permission, popup
+- `/extension/content.js` - UPDATED - Uses web API with API key auth
+- `/extension/popup.html` - CREATED - API key configuration popup
+- `/extension/popup.js` - CREATED - Popup logic
 
 ---
 

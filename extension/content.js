@@ -1,6 +1,30 @@
-// TradingView Bridge v1.7.0 - Works on TradingView.com, app.hyperliquid.xyz, and drift.trade
+// TradingView Bridge v2.0.0 - Works on TradingView.com, app.hyperliquid.xyz, and drift.trade
+// Uses web API instead of localhost Tauri app
 console.log('[TV Bridge] Script starting...');
 
+// Web API endpoint
+const API_BASE = 'https://dobri.org/api/extension';
+let storedApiKey = null;
+
+// Load API key from storage
+chrome.storage.sync.get(['tvBridgeApiKey'], (result) => {
+  if (result.tvBridgeApiKey) {
+    storedApiKey = result.tvBridgeApiKey;
+    console.log('[TV Bridge] API key loaded');
+  } else {
+    console.log('[TV Bridge] No API key configured - click extension icon to set up');
+  }
+});
+
+// Listen for storage changes (key updates)
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.tvBridgeApiKey) {
+    storedApiKey = changes.tvBridgeApiKey.newValue;
+    console.log('[TV Bridge] API key updated');
+  }
+});
+
+// Legacy compatibility - these were used by Tauri app
 const BRIDGE_PORT = 3456;
 const BRIDGE_URL = `http://localhost:${BRIDGE_PORT}`;
 const IS_HYPERLIQUID = window.location.hostname === 'app.hyperliquid.xyz';
@@ -64,8 +88,14 @@ function sendToParent(type, data) {
 // =====================================================
 
 async function fetchSettings() {
+  if (!storedApiKey) {
+    console.log('[TV Bridge] No API key - using defaults');
+    return;
+  }
   try {
-    const response = await fetch(`${BRIDGE_URL}/settings`);
+    const response = await fetch(`${API_BASE}/settings`, {
+      headers: { 'x-api-key': storedApiKey }
+    });
     if (response.ok) {
       const data = await response.json();
       settings.risk = data.risk || 1;
@@ -73,12 +103,17 @@ async function fetchSettings() {
       settings.asset = data.asset || 'BTC';
       settings.price = data.price || 0;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log('[TV Bridge] Settings fetch error:', e.message);
+  }
 }
 
 async function fetchCurrentPrice() {
+  if (!storedApiKey) return null;
   try {
-    const response = await fetch(`${BRIDGE_URL}/settings`);
+    const response = await fetch(`${API_BASE}/settings`, {
+      headers: { 'x-api-key': storedApiKey }
+    });
     if (response.ok) {
       const data = await response.json();
       if (data.price > 0) {
@@ -646,8 +681,9 @@ function createOverlay(data) {
 
     <div class="tv-bridge-footer">
       ${isPinned ? '<div class="tv-bridge-pinned-indicator">PINNED</div>' : ''}
-      ${IS_EXCHANGE_SITE ? `Using ${SITE_NAME} chart - exact price match!` : 'Tip: Use exchange chart or BYBIT:BTCUSDT.P'}<br>
-      TradingView Bridge v1.8.0
+      ${!storedApiKey ? '<div style="color:#ef4444">No API key - click extension icon</div>' : ''}
+      ${IS_EXCHANGE_SITE ? `Using ${SITE_NAME} chart` : 'Tip: Use exchange chart or BYBIT:BTCUSDT.P'}<br>
+      TradingView Bridge v2.0.0
     </div>
   `;
 
@@ -801,10 +837,18 @@ function createOverlay(data) {
     // Detect timeframe from chart
     const timeframe = getChartTimeframe();
 
+    // Check for API key
+    if (!storedApiKey) {
+      throw new Error('No API key - click extension icon to configure');
+    }
+
     try {
-      const response = await fetch(`${BRIDGE_URL}/execute-trade`, {
+      const response = await fetch(`${API_BASE}/execute`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': storedApiKey
+        },
         body: JSON.stringify({
           direction: currentPositionData.direction,
           entry: entryPrice,
@@ -864,7 +908,7 @@ function createOverlay(data) {
       enterBtn.classList.add('error');
 
       // Show error message - truncate if too long
-      const errorText = e.message || 'App not running';
+      const errorText = e.message || 'Connection failed';
       const displayError = errorText.length > 30 ? errorText.substring(0, 30) + '...' : errorText;
       enterBtn.innerHTML = `&#x2717; ${displayError}`;
 
@@ -1368,4 +1412,4 @@ if (IS_EXCHANGE_SITE && !IS_IN_IFRAME) {
   fsWaitForChart();
 }
 
-console.log('[TV Bridge] Ready');
+console.log('[TV Bridge v2.0.0] Ready - Web API mode');
