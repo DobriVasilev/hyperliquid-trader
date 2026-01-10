@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# Set up automated backups for Neon database
+# Set up automated backups for Neon database -> Cloudflare R2
 # Run as: sudo ./07-setup-backups.sh
 
-echo "=== Setting Up Automated Backups ==="
+echo "=== Setting Up Automated Backups (with R2) ==="
 
-# Create backup directory
+# Create backup directory (local cache)
 mkdir -p /var/backups/trading-app
 chown dobri:dobri /var/backups/trading-app
 
@@ -14,15 +14,25 @@ chown dobri:dobri /var/backups/trading-app
 mkdir -p /var/log/trading-app
 chown dobri:dobri /var/log/trading-app
 
+# Install rclone if not present
+if ! command -v rclone &> /dev/null; then
+    echo "Installing rclone for R2 uploads..."
+    curl -s https://rclone.org/install.sh | bash
+fi
+
+# Create rclone config directory
+mkdir -p /home/dobri/.config/rclone
+
 # Create backup script
 cat > /usr/local/bin/backup-trading-app.sh << 'SCRIPT'
 #!/bin/bash
 set -euo pipefail
 
-# Backup script for trading app (Neon database)
+# Backup script for trading app (Neon database -> Cloudflare R2)
 BACKUP_DIR="/var/backups/trading-app"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/backup_${TIMESTAMP}.tar.gz"
+BACKUP_FILENAME="backup_${TIMESTAMP}.tar.gz"
+BACKUP_FILE="${BACKUP_DIR}/${BACKUP_FILENAME}"
 APP_DIR="/home/dobri/systems-trader/web"
 
 echo "Starting backup at $(date)"
@@ -31,15 +41,16 @@ echo "Starting backup at $(date)"
 TMP_DIR=$(mktemp -d)
 trap "rm -rf ${TMP_DIR}" EXIT
 
-# Get database URL from .env file
+# Load environment variables from .env
 if [ -f "${APP_DIR}/.env" ]; then
-    DATABASE_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    # Source env vars (handle spaces and quotes)
+    export $(grep -v '^#' "${APP_DIR}/.env" | grep -v '^$' | sed 's/^[[:space:]]*//' | xargs)
 else
     echo "ERROR: .env file not found"
     exit 1
 fi
 
-if [ -z "${DATABASE_URL}" ]; then
+if [ -z "${DATABASE_URL:-}" ]; then
     echo "ERROR: DATABASE_URL not found in .env"
     exit 1
 fi
@@ -53,7 +64,7 @@ else
     echo "Continuing with config backup only..."
 fi
 
-# Backup .env file (contains secrets - encrypt it!)
+# Backup .env file (contains secrets)
 echo "Backing up configuration..."
 cp "${APP_DIR}/.env" "${TMP_DIR}/"
 
@@ -66,21 +77,48 @@ Backup Date: $(date)
 Hostname: $(hostname)
 App Directory: ${APP_DIR}
 Database: Neon PostgreSQL
+Storage: Cloudflare R2
 EOF
 
 # Create compressed archive
 echo "Creating archive..."
 tar -czf "${BACKUP_FILE}" -C "${TMP_DIR}" .
 
-# Remove backups older than 30 days
-echo "Cleaning old backups..."
-find "${BACKUP_DIR}" -name "backup_*.tar.gz" -mtime +30 -delete
-
 # Get backup size
 BACKUP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+echo "Local backup: ${BACKUP_FILE} (${BACKUP_SIZE})"
 
-echo "Backup complete: ${BACKUP_FILE} (${BACKUP_SIZE})"
-echo "Backup finished at $(date)"
+# Upload to Cloudflare R2
+echo "Uploading to Cloudflare R2..."
+if [ -n "${R2_ACCESS_KEY_ID:-}" ] && [ -n "${R2_SECRET_ACCESS_KEY:-}" ] && [ -n "${R2_ACCOUNT_ID:-}" ]; then
+    # Configure rclone on-the-fly
+    export RCLONE_CONFIG_R2_TYPE=s3
+    export RCLONE_CONFIG_R2_PROVIDER=Cloudflare
+    export RCLONE_CONFIG_R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}"
+    export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}"
+    export RCLONE_CONFIG_R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    export RCLONE_CONFIG_R2_ACL=private
+
+    R2_BUCKET="${R2_BUCKET_NAME:-trading-app-backups}"
+
+    if rclone copy "${BACKUP_FILE}" "r2:${R2_BUCKET}/backups/" --progress; then
+        echo "R2 upload successful: r2:${R2_BUCKET}/backups/${BACKUP_FILENAME}"
+
+        # Clean old R2 backups (keep last 30)
+        echo "Cleaning old R2 backups..."
+        rclone delete "r2:${R2_BUCKET}/backups/" --min-age 30d 2>/dev/null || true
+    else
+        echo "WARNING: R2 upload failed, backup saved locally only"
+    fi
+else
+    echo "WARNING: R2 credentials not found, backup saved locally only"
+fi
+
+# Remove local backups older than 7 days (R2 is primary, local is cache)
+echo "Cleaning old local backups..."
+find "${BACKUP_DIR}" -name "backup_*.tar.gz" -mtime +7 -delete
+
+echo "Backup complete at $(date)"
 SCRIPT
 
 chmod +x /usr/local/bin/backup-trading-app.sh
@@ -131,15 +169,17 @@ echo ""
 echo "=== Backup Setup Complete ==="
 echo ""
 echo "Backups will run daily at 2:00 AM"
-echo "Backup location: /var/backups/trading-app/"
-echo "Backups are kept for 30 days"
+echo "Primary storage: Cloudflare R2 (30 days retention)"
+echo "Local cache: /var/backups/trading-app/ (7 days)"
 echo ""
 echo "Commands:"
 echo "  Manual backup: sudo /usr/local/bin/backup-trading-app.sh"
 echo "  Check timer:   systemctl list-timers trading-app-backup.timer"
 echo "  View log:      tail -f /var/log/trading-app/backup.log"
+echo "  List R2 backups: rclone ls r2:\${R2_BUCKET_NAME}/backups/"
 echo ""
-echo "To restore from backup:"
-echo "  1. Extract: tar -xzf /var/backups/trading-app/backup_YYYYMMDD_HHMMSS.tar.gz -C /tmp/restore"
-echo "  2. Restore DB: pg_restore -d \"\$DATABASE_URL\" /tmp/restore/database.dump"
-echo "  3. Restore .env if needed"
+echo "To restore from R2:"
+echo "  1. Download: rclone copy r2:\${R2_BUCKET_NAME}/backups/backup_YYYYMMDD_HHMMSS.tar.gz /tmp/"
+echo "  2. Extract: tar -xzf /tmp/backup_YYYYMMDD_HHMMSS.tar.gz -C /tmp/restore"
+echo "  3. Restore DB: pg_restore -d \"\$DATABASE_URL\" /tmp/restore/database.dump"
+echo "  4. Restore .env if needed"
