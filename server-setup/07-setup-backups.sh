@@ -43,15 +43,20 @@ trap "rm -rf ${TMP_DIR}" EXIT
 
 # Load environment variables from .env
 if [ -f "${APP_DIR}/.env" ]; then
-    # Read env vars line by line (handles special characters better)
+    # Read env vars line by line
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip comments and empty lines
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$line" ]] && continue
-        # Remove leading spaces and export
+        # Remove leading spaces
         line=$(echo "$line" | sed 's/^[[:space:]]*//')
-        if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
-            export "$line"
+        # Extract var name and value, strip quotes from value
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*) ]]; then
+            var_name="${BASH_REMATCH[1]}"
+            var_value="${BASH_REMATCH[2]}"
+            # Remove surrounding quotes (single or double)
+            var_value=$(echo "$var_value" | sed 's/^["'"'"']//;s/["'"'"']$//')
+            export "$var_name=$var_value"
         fi
     done < "${APP_DIR}/.env"
 else
