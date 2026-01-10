@@ -193,3 +193,4 @@ journalctl -u trading-app -f
 4. **US users need Bulgarian IP.** They use VPN once to create Hyperliquid account/API key, then all trading goes through our server.
 
 5. **PNL-based sizing is the killer feature.** Fast trade entry because you specify risk, not position size.
+
