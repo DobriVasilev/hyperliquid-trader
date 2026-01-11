@@ -29,6 +29,12 @@ model User {
   bio           String?   @db.Text
   username      String?   @unique // @username for mentions
 
+  // Security PIN (6-digit, bcrypt hashed)
+  securityPin       String?   // bcrypt hashed PIN
+  pinAttempts       Int       @default(0) // Failed attempts counter
+  pinLockedUntil    DateTime? // Lockout expiry
+  pinSetAt          DateTime? // When PIN was set
+
   // User preferences (stored as JSON)
   // {defaultSymbol, defaultTimeframe, swingDetectionMode, emailNotifications, collaborationAlerts}
   preferences   Json?
@@ -113,6 +119,26 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// Security verification codes (for email verification on sensitive actions)
+model SecurityCode {
+  id          String   @id @default(cuid())
+  userId      String
+  code        String   // 6-digit code (hashed)
+  action      String   // "withdraw", "emergency_withdraw", etc.
+
+  // Rate limiting
+  attempts    Int      @default(0) // Failed verification attempts
+
+  // Expiry
+  expiresAt   DateTime
+  usedAt      DateTime?
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId, action])
+  @@index([expiresAt])
 }
 
 // ============================================================================

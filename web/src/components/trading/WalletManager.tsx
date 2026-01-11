@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSecurityGate } from "@/components/security";
 
 interface Wallet {
   id: string;
@@ -32,6 +33,10 @@ export function WalletManager({ selectedWallet, onSelectWallet }: WalletManagerP
   const [apiPrivateKey, setApiPrivateKey] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  // Security gate for sensitive actions
+  const { requireSecurity, SecurityGate } = useSecurityGate();
 
   useEffect(() => {
     fetchWallets();
@@ -92,12 +97,15 @@ export function WalletManager({ selectedWallet, onSelectWallet }: WalletManagerP
     }
   }
 
-  async function handleDeleteWallet(walletId: string) {
-    if (!confirm("Are you sure you want to delete this wallet? This cannot be undone.")) {
-      return;
-    }
+  function handleDeleteWallet(walletId: string) {
+    // Store the wallet ID and trigger security verification
+    setPendingDeleteId(walletId);
+    requireSecurity("delete_wallet", () => performDeleteWallet(walletId));
+  }
 
+  async function performDeleteWallet(walletId: string) {
     setDeletingId(walletId);
+    setPendingDeleteId(null);
     setError("");
 
     try {
@@ -396,6 +404,9 @@ export function WalletManager({ selectedWallet, onSelectWallet }: WalletManagerP
           </div>
         )}
       </div>
+
+      {/* Security Gate Modal */}
+      <SecurityGate />
     </div>
   );
 }
