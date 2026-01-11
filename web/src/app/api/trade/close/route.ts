@@ -11,7 +11,6 @@ import { getWalletClient } from '@/lib/trading-client';
 
 interface CloseRequest {
   walletId?: string;
-  password: string;
   symbol?: string; // If not provided, closes all positions
 }
 
@@ -23,17 +22,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CloseRequest = await request.json();
-    const { walletId, password, symbol } = body;
+    const { walletId, symbol } = body;
 
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
-
-    // Get wallet and client
+    // Get wallet and client (uses server-side encryption, no password needed)
     const { wallet, client } = await getWalletClient(
       session.user.id,
-      walletId || null,
-      password
+      walletId || null
     );
 
     let result;
@@ -77,9 +71,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
 
-    if (message === 'Invalid password') {
-      return NextResponse.json({ error: message }, { status: 401 });
-    }
     if (message.includes('not found')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }

@@ -13,7 +13,6 @@ import {
 
 interface TradingFormPnlProps {
   walletId: string | null;
-  password: string;
   availableBalance: number;
   onTradeComplete: () => void;
 }
@@ -27,7 +26,6 @@ const POPULAR_SYMBOLS = ["BTC", "ETH", "SOL", "DOGE", "WIF", "PEPE"];
 
 export function TradingFormPnl({
   walletId,
-  password,
   availableBalance,
   onTradeComplete
 }: TradingFormPnlProps) {
@@ -183,7 +181,6 @@ export function TradingFormPnl({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           walletId,
-          password,
           symbol: selectedAsset,
           side: direction,
           size: finalQty,
@@ -215,7 +212,7 @@ export function TradingFormPnl({
       setIsExecuting(false);
       setExecutionStatus("");
     }
-  }, [walletId, password, calculations, direction, warnings, entryPrice, stopLoss, takeProfit, riskAmount, selectedAsset, leverage, orderType, pnlTolerance, onTradeComplete, setShowConfirmModal, setIsExecuting, setExecutionStatus, setStopLoss, setTakeProfit]);
+  }, [walletId, calculations, direction, warnings, entryPrice, stopLoss, takeProfit, riskAmount, selectedAsset, leverage, orderType, pnlTolerance, onTradeComplete, setShowConfirmModal, setIsExecuting, setExecutionStatus, setStopLoss, setTakeProfit]);
 
   const handlePrepareTrade = () => {
     if (!calculations || !direction) {

@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import {
-  encryptPrivateKey,
+  encryptPrivateKeyServerSide,
   serializeEncryptedData,
   isValidPrivateKey,
 } from '@/lib/wallet-encryption';
@@ -23,12 +23,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { walletAddress, apiPrivateKey, password, nickname } = body;
+    const { walletAddress, apiPrivateKey, nickname } = body;
 
     // Validate inputs
-    if (!walletAddress || !apiPrivateKey || !password || !nickname) {
+    if (!walletAddress || !apiPrivateKey || !nickname) {
       return NextResponse.json(
-        { error: 'Missing required fields: walletAddress, apiPrivateKey, password, nickname' },
+        { error: 'Missing required fields: walletAddress, apiPrivateKey, nickname' },
         { status: 400 }
       );
     }
@@ -44,13 +44,6 @@ export async function POST(request: NextRequest) {
     if (!isValidPrivateKey(apiPrivateKey)) {
       return NextResponse.json(
         { error: 'Invalid API private key format. Must be 64 hex characters (with or without 0x prefix)' },
-        { status: 400 }
-      );
-    }
-
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: 'Password must be at least 8 characters' },
         { status: 400 }
       );
     }
@@ -75,8 +68,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Encrypt the API private key
-    const encryptedData = await encryptPrivateKey(apiPrivateKey, password);
+    // Encrypt the API private key using server-side encryption
+    const encryptedData = await encryptPrivateKeyServerSide(apiPrivateKey);
     const serializedEncryptedKey = serializeEncryptedData(encryptedData);
 
     // Check if this is the user's first wallet (make it default)

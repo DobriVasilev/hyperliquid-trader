@@ -5,7 +5,7 @@
  */
 
 import { prisma } from '@/lib/db';
-import { deserializeEncryptedData, decryptPrivateKey } from '@/lib/wallet-encryption';
+import { deserializeEncryptedData, decryptPrivateKeyServerSide } from '@/lib/wallet-encryption';
 import { HyperliquidClient } from '@/lib/hyperliquid';
 
 interface WalletWithClient {
@@ -19,16 +19,15 @@ interface WalletWithClient {
 
 /**
  * Get a wallet and initialized Hyperliquid client
+ * Uses server-side encryption - no user password needed
  *
  * @param userId - The user's ID
  * @param walletId - The wallet ID (or null for default wallet)
- * @param password - The wallet encryption password
  * @returns The wallet and initialized client
  */
 export async function getWalletClient(
   userId: string,
-  walletId: string | null,
-  password: string
+  walletId: string | null
 ): Promise<WalletWithClient> {
   // Get wallet (specific or default)
   const wallet = await prisma.userWallet.findFirst({
@@ -47,15 +46,9 @@ export async function getWalletClient(
     throw new Error(walletId ? 'Wallet not found' : 'No default wallet found');
   }
 
-  // Decrypt private key
+  // Decrypt private key using server-side key
   const encryptedData = deserializeEncryptedData(wallet.encryptedKey);
-  let privateKey: string;
-
-  try {
-    privateKey = await decryptPrivateKey(encryptedData, password);
-  } catch {
-    throw new Error('Invalid password');
-  }
+  const privateKey = await decryptPrivateKeyServerSide(encryptedData);
 
   // Create and initialize client
   const client = new HyperliquidClient(privateKey);

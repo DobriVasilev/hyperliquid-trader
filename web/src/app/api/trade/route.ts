@@ -10,7 +10,6 @@ import { getWalletClient, recordTrade } from '@/lib/trading-client';
 
 interface TradeRequest {
   walletId?: string;
-  password: string;
   symbol: string;
   side: 'long' | 'short';
   size: number;
@@ -31,7 +30,6 @@ export async function POST(request: NextRequest) {
     const body: TradeRequest = await request.json();
     const {
       walletId,
-      password,
       symbol,
       side,
       size,
@@ -43,9 +41,6 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate inputs
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
     if (!symbol) {
       return NextResponse.json({ error: 'Symbol is required' }, { status: 400 });
     }
@@ -62,11 +57,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Limit price required for limit orders' }, { status: 400 });
     }
 
-    // Get wallet and client
+    // Get wallet and client (uses server-side encryption, no password needed)
     const { wallet, client } = await getWalletClient(
       session.user.id,
-      walletId || null,
-      password
+      walletId || null
     );
 
     // Set leverage first
@@ -160,9 +154,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
 
-    if (message === 'Invalid password') {
-      return NextResponse.json({ error: message }, { status: 401 });
-    }
     if (message.includes('not found')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }

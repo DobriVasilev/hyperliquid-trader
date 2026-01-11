@@ -158,3 +158,29 @@ export function generateSecurePassword(length: number = 32): string {
   }
   return password;
 }
+
+/**
+ * Get the server-side encryption key from environment
+ * Falls back to AUTH_SECRET if WALLET_ENCRYPTION_KEY is not set
+ */
+function getServerEncryptionKey(): string {
+  const key = process.env.WALLET_ENCRYPTION_KEY || process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!key) {
+    throw new Error('No encryption key configured. Set WALLET_ENCRYPTION_KEY in .env');
+  }
+  return key;
+}
+
+/**
+ * Encrypt a private key using server-side key (no user password needed)
+ */
+export async function encryptPrivateKeyServerSide(privateKey: string): Promise<EncryptedData> {
+  return encryptPrivateKey(privateKey, getServerEncryptionKey());
+}
+
+/**
+ * Decrypt a private key using server-side key (no user password needed)
+ */
+export async function decryptPrivateKeyServerSide(encryptedData: EncryptedData): Promise<string> {
+  return decryptPrivateKey(encryptedData, getServerEncryptionKey());
+}

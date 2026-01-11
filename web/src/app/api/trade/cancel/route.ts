@@ -10,7 +10,6 @@ import { getWalletClient } from '@/lib/trading-client';
 
 interface CancelRequest {
   walletId?: string;
-  password: string;
   symbol: string;
   orderId: number;
 }
@@ -23,11 +22,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CancelRequest = await request.json();
-    const { walletId, password, symbol, orderId } = body;
+    const { walletId, symbol, orderId } = body;
 
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
     if (!symbol) {
       return NextResponse.json({ error: 'Symbol is required' }, { status: 400 });
     }
@@ -35,11 +31,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
     }
 
-    // Get wallet and client
+    // Get wallet and client (uses server-side encryption, no password needed)
     const { wallet, client } = await getWalletClient(
       session.user.id,
-      walletId || null,
-      password
+      walletId || null
     );
 
     // Cancel the order
@@ -64,9 +59,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
 
-    if (message === 'Invalid password') {
-      return NextResponse.json({ error: message }, { status: 401 });
-    }
     if (message.includes('not found')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
