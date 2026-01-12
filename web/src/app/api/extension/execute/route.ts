@@ -9,8 +9,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { deserializeEncryptedData, decryptPrivateKey } from '@/lib/wallet-encryption';
+import { deserializeEncryptedData, decryptPrivateKeyServerSide } from '@/lib/wallet-encryption';
 import { HyperliquidClient } from '@/lib/hyperliquid';
+import { isUsingTradingApi, tradingApi } from '@/lib/trading-client';
 import {
   calculatePositionSize,
   verifyAndAdjustPnl,
@@ -56,10 +57,6 @@ export async function POST(request: NextRequest) {
 
     if (!extensionKey.wallet) {
       return NextResponse.json({ error: 'No wallet configured for this key' }, { status: 400 });
-    }
-
-    if (!extensionKey.walletPassword) {
-      return NextResponse.json({ error: 'Wallet password not set' }, { status: 400 });
     }
 
     const body: ExecuteTradeRequest = await request.json();
@@ -109,49 +106,81 @@ export async function POST(request: NextRequest) {
     );
 
     const finalQty = verified ? adjustedQty : sizingResult.qty;
-
-    // Decrypt wallet private key
-    const encryptedData = deserializeEncryptedData(extensionKey.wallet.encryptedKey);
-    let privateKey: string;
-
-    try {
-      privateKey = await decryptPrivateKey(encryptedData, extensionKey.walletPassword);
-    } catch {
-      return NextResponse.json({ error: 'Failed to decrypt wallet' }, { status: 500 });
-    }
-
-    // Create Hyperliquid client
-    const client = new HyperliquidClient(privateKey);
-    await client.initialize();
-
-    // Set leverage first
-    if (leverage > 1) {
-      await client.setLeverage(extensionKey.asset, leverage);
-    }
-
-    // Execute market order
     const isBuy = direction === 'long';
-    const result = await client.placeMarketOrder(extensionKey.asset, isBuy, finalQty);
+    const encryptedKey = extensionKey.wallet.encryptedKey;
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error || 'Order failed' }, { status: 400 });
-    }
-
-    // Place stop loss
+    let result: { success: boolean; orderId?: number; error?: string };
     let slOrderId: number | undefined;
-    if (result.success) {
+    let tpOrderId: number | undefined;
+
+    if (isUsingTradingApi()) {
+      // Remote mode: Use Trading API
+      // Set leverage first
+      if (leverage > 1) {
+        await tradingApi.setLeverage(encryptedKey, extensionKey.asset, leverage);
+      }
+
+      // Execute market order
+      const marketResult = await tradingApi.placeMarketOrder(encryptedKey, extensionKey.asset, isBuy, finalQty);
+      if (!marketResult.success || !marketResult.data?.success) {
+        return NextResponse.json(
+          { error: marketResult.error || marketResult.data?.error || 'Order failed' },
+          { status: 400 }
+        );
+      }
+      result = marketResult.data;
+
+      // Place stop loss
+      const slResult = await tradingApi.placeStopLoss(encryptedKey, extensionKey.asset, isBuy, finalQty, stopLoss);
+      if (slResult.success && slResult.data?.success) {
+        slOrderId = slResult.data.orderId;
+      }
+
+      // Place take profit if specified
+      if (takeProfit) {
+        const tpResult = await tradingApi.placeTakeProfit(encryptedKey, extensionKey.asset, isBuy, finalQty, takeProfit);
+        if (tpResult.success && tpResult.data?.success) {
+          tpOrderId = tpResult.data.orderId;
+        }
+      }
+    } else {
+      // Local mode: Use Hyperliquid client directly
+      const encryptedData = deserializeEncryptedData(encryptedKey);
+      let privateKey: string;
+
+      try {
+        privateKey = await decryptPrivateKeyServerSide(encryptedData);
+      } catch {
+        return NextResponse.json({ error: 'Failed to decrypt wallet' }, { status: 500 });
+      }
+
+      const client = new HyperliquidClient(privateKey);
+      await client.initialize();
+
+      // Set leverage first
+      if (leverage > 1) {
+        await client.setLeverage(extensionKey.asset, leverage);
+      }
+
+      // Execute market order
+      result = await client.placeMarketOrder(extensionKey.asset, isBuy, finalQty);
+
+      if (!result.success) {
+        return NextResponse.json({ error: result.error || 'Order failed' }, { status: 400 });
+      }
+
+      // Place stop loss
       const slResult = await client.placeStopLoss(extensionKey.asset, isBuy, finalQty, stopLoss);
       if (slResult.success) {
         slOrderId = slResult.orderId;
       }
-    }
 
-    // Place take profit if specified
-    let tpOrderId: number | undefined;
-    if (takeProfit && result.success) {
-      const tpResult = await client.placeTakeProfit(extensionKey.asset, isBuy, finalQty, takeProfit);
-      if (tpResult.success) {
-        tpOrderId = tpResult.orderId;
+      // Place take profit if specified
+      if (takeProfit) {
+        const tpResult = await client.placeTakeProfit(extensionKey.asset, isBuy, finalQty, takeProfit);
+        if (tpResult.success) {
+          tpOrderId = tpResult.orderId;
+        }
       }
     }
 
