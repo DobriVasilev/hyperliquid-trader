@@ -42,23 +42,25 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
   }, [showDropdown]);
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+    <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo and Title */}
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">ST</span>
-              </div>
-              <span className="font-semibold text-gray-900 hidden sm:block">
+              <img
+                src="https://pub-5cc5403568f5455a945da44f4db19f23.r2.dev/systems_trader_logo.png"
+                alt="Systems Trader Logo"
+                className="w-8 h-8 rounded-lg"
+              />
+              <span className="font-semibold text-white hidden sm:block">
                 Systems Trader
               </span>
             </Link>
             {title && (
               <>
-                <span className="text-gray-300 hidden sm:block">/</span>
-                <h1 className="text-lg font-semibold text-gray-900 hidden sm:block">
+                <span className="text-gray-500 hidden sm:block">/</span>
+                <h1 className="text-lg font-semibold text-white hidden sm:block">
                   {title}
                 </h1>
               </>
@@ -76,8 +78,8 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
                     href={item.href}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive
-                        ? "bg-blue-50 text-blue-600"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                        ? "bg-blue-600 text-white"
+                        : "text-gray-300 hover:bg-gray-800 hover:text-white"
                     }`}
                   >
                     {item.label}
@@ -92,7 +94,7 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-800 transition-colors border border-gray-800"
               >
                 {session.user.image ? (
                   <img
@@ -108,11 +110,11 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
                   </div>
                 )}
                 <div className="hidden sm:block text-left">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-white">
                     {session.user.name || "User"}
                   </div>
                   {isAdmin && (
-                    <div className="text-xs text-blue-600 font-medium">Admin</div>
+                    <div className="text-xs text-blue-400 font-medium">Admin</div>
                   )}
                 </div>
                 <svg
@@ -134,24 +136,24 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
 
               {/* Dropdown Menu */}
               {showDropdown && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-gray-800 rounded-lg shadow-xl border border-gray-700 py-1 z-50">
                   {/* User Info */}
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="text-sm font-medium text-gray-900">
+                  <div className="px-4 py-3 border-b border-gray-700">
+                    <div className="text-sm font-medium text-white">
                       {session.user.name || "User"}
                     </div>
-                    <div className="text-xs text-gray-500 truncate">
+                    <div className="text-xs text-gray-400 truncate">
                       {session.user.email}
                     </div>
                     {isAdmin && (
-                      <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                      <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-600 text-white">
                         Admin
                       </div>
                     )}
                   </div>
 
                   {/* Mobile Navigation */}
-                  <div className="md:hidden py-1 border-b border-gray-100">
+                  <div className="md:hidden py-1 border-b border-gray-700">
                     {navItems.map((item) => {
                       const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                       return (
@@ -161,8 +163,8 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
                           onClick={() => setShowDropdown(false)}
                           className={`block px-4 py-2 text-sm ${
                             isActive
-                              ? "bg-blue-50 text-blue-600 font-medium"
-                              : "text-gray-700 hover:bg-gray-50"
+                              ? "bg-blue-600 text-white font-medium"
+                              : "text-gray-300 hover:bg-gray-700"
                           }`}
                         >
                           {item.label}
@@ -176,7 +178,7 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
                     <Link
                       href="/account"
                       onClick={() => setShowDropdown(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
                     >
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,13 +190,13 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
                   </div>
 
                   {/* Sign Out */}
-                  <div className="py-1 border-t border-gray-100">
+                  <div className="py-1 border-t border-gray-700">
                     <button
                       onClick={() => {
                         setShowDropdown(false);
                         signOut({ callbackUrl: "/" });
                       }}
-                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700"
                     >
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
