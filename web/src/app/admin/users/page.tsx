@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import { UserManagement } from "@/components/admin/UserManagement";
 
-export default async function AdminPage() {
+export default async function UsersPage() {
   const session = await auth();
 
   // Only admins can access
@@ -13,8 +13,8 @@ export default async function AdminPage() {
 
   return (
     <div className="min-h-screen bg-black">
-      <AppHeader title="Admin Panel" />
-      <AdminDashboard />
+      <AppHeader title="User Management" />
+      <UserManagement />
     </div>
   );
 }

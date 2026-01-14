@@ -24,7 +24,6 @@ export function AppHeader({ title, showNav = true }: AppHeaderProps) {
     { href: "/bots", label: "Bots" },
     { href: "/sessions", label: "Sessions" },
     { href: "/chat", label: "Chat" },
-    { href: "/feedback", label: "Feedback" },
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 

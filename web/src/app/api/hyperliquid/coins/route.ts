@@ -191,12 +191,26 @@ const SYMBOL_TO_COINGECKO: Record<string, string> = {
   LUNA: "terra-luna-2",
 };
 
-// Use CoinCap for coin icons (most reliable)
-function getCoinIcon(symbol: string): string {
-  const upperSymbol = symbol.toUpperCase();
+// Get coin icon with multiple fallbacks
+function getCoinIcon(symbol: string): string | undefined {
+  const lowerSymbol = symbol.toLowerCase();
 
-  // Try CryptoCompare first (most reliable)
-  return `https://assets.coincap.io/assets/icons/${upperSymbol.toLowerCase()}@2x.png`;
+  // For common/major coins, use CryptoCompare (most reliable, high quality icons)
+  const majorCoins = ["btc", "eth", "sol", "doge", "xrp", "hype", "avax", "link", "arb", "op",
+    "matic", "apt", "sui", "sei", "tia", "inj", "near", "atom", "ftm", "aave"];
+
+  if (majorCoins.includes(lowerSymbol)) {
+    return `https://www.cryptocompare.com/media/37746251/${lowerSymbol}.png`;
+  }
+
+  // For all other coins, try CoinGecko if we have a mapping
+  const coingeckoId = SYMBOL_TO_COINGECKO[symbol.toUpperCase()];
+  if (coingeckoId) {
+    return `https://assets.coingecko.com/coins/images/small/${coingeckoId}.png`;
+  }
+
+  // Return undefined to use the gradient fallback in the UI
+  return undefined;
 }
 
 export async function GET() {
