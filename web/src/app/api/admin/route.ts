@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (type === "sessions") {
+    if (type === "sessions" || type === "feedback") {
       // Get all sessions with feedback counts
       const sessions = await prisma.patternSession.findMany({
         select: {
@@ -71,6 +71,9 @@ export async function GET(request: NextRequest) {
           patternType: true,
           status: true,
           isPublic: true,
+          feedbackType: true,
+          submittedForReviewAt: true,
+          implementedAt: true,
           createdAt: true,
           updatedAt: true,
           createdBy: {

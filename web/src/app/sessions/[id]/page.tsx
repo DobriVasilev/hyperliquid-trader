@@ -572,7 +572,7 @@ export default function SessionDetailPage({
   };
 
   // Comment handlers
-  const handleAddComment = async (content: string, detectionId?: string) => {
+  const handleAddComment = async (content: string, detectionId?: string, attachments?: { id: string; url: string; name: string; size: number; type: string; category: string }[]) => {
     try {
       const response = await fetch(`/api/sessions/${id}/comments`, {
         method: "POST",
@@ -580,6 +580,7 @@ export default function SessionDetailPage({
         body: JSON.stringify({
           content,
           detectionId: detectionId || null,
+          attachments: attachments || undefined,
         }),
       });
 
@@ -596,7 +597,7 @@ export default function SessionDetailPage({
     }
   };
 
-  const handleReplyComment = async (content: string, parentId: string) => {
+  const handleReplyComment = async (content: string, parentId: string, attachments?: { id: string; url: string; name: string; size: number; type: string; category: string }[]) => {
     try {
       const response = await fetch(`/api/sessions/${id}/comments`, {
         method: "POST",
@@ -604,6 +605,7 @@ export default function SessionDetailPage({
         body: JSON.stringify({
           content,
           parentId,
+          attachments: attachments || undefined,
         }),
       });
 
@@ -1041,7 +1043,8 @@ export default function SessionDetailPage({
                   {/* Comment Input */}
                   <div className="mb-4">
                     <CommentInput
-                      onSubmit={(content) => handleAddComment(content)}
+                      sessionId={id}
+                      onSubmit={(content, attachments) => handleAddComment(content, undefined, attachments)}
                       placeholder="Add a comment about this session..."
                     />
                   </div>
@@ -1053,6 +1056,7 @@ export default function SessionDetailPage({
                         <CommentThread
                           key={comment.id}
                           comment={comment}
+                          sessionId={id}
                           onReply={handleReplyComment}
                           onResolve={handleResolveComment}
                           onDelete={handleDeleteComment}
@@ -1319,6 +1323,7 @@ export default function SessionDetailPage({
         }}
         detection={selectedDetection}
         mode={correctionMode}
+        sessionId={id}
         addData={addData || undefined}
         moveTargetData={moveTargetData || undefined}
         autoDetectionType={autoDetectionType}

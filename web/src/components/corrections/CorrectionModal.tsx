@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PatternDetection } from "@/hooks/useSession";
+import { SessionFileUpload, SessionAttachment } from "@/components/sessions/SessionFileUpload";
 
 interface CorrectionModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface CorrectionModalProps {
   onStartMove?: (detection: PatternDetection) => void; // Callback to start move mode
   detection?: PatternDetection | null;
   mode: "delete" | "move" | "add" | "confirm" | "unconfirm" | "options"; // Added "options" and "unconfirm" modes
+  sessionId: string; // Required for file uploads
   // For add mode
   addData?: {
     time: number;
@@ -39,6 +41,7 @@ export interface CorrectionData {
   correctedPrice?: number;
   correctedType?: string;
   correctedStructure?: string;
+  attachments?: SessionAttachment[];
 }
 
 const DETECTION_TYPES = [
@@ -60,6 +63,7 @@ export function CorrectionModal({
   onStartMove,
   detection,
   mode,
+  sessionId,
   addData,
   moveTargetData,
   autoDetectionType,
@@ -70,6 +74,10 @@ export function CorrectionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [internalMode, setInternalMode] = useState<"delete" | "move" | "add" | "confirm" | "unconfirm">("delete");
   const [showReasoning, setShowReasoning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<SessionAttachment[]>([]);
+
+  const MAX_REASON_LENGTH = 5000;
 
   // Form ref for programmatic submission
   const formRef = useRef<HTMLFormElement>(null);
@@ -79,6 +87,8 @@ export function CorrectionModal({
     if (isOpen) {
       setReason("");
       setShowReasoning(false);
+      setError(null);
+      setAttachments([]);
       // Use autoDetectionType from toolbar if available, otherwise fall back to detection type
       if (autoDetectionType && mode === "add") {
         setDetectionType(autoDetectionType);
@@ -128,12 +138,20 @@ export function CorrectionModal({
     e.preventDefault();
     // Reason is now optional
 
+    // Validate reason length
+    if (reason.length > MAX_REASON_LENGTH) {
+      setError(`Reason is too long (${reason.length}/${MAX_REASON_LENGTH} characters). Please shorten it.`);
+      return;
+    }
+
     console.log('[Modal] handleSubmit called', { effectiveMode, mode });
     setIsSubmitting(true);
+    setError(null);
     try {
       const correctionData: CorrectionData = {
         correctionType: effectiveMode,
         reason: reason.trim(),
+        attachments: attachments.length > 0 ? attachments : undefined,
       };
 
       if (effectiveMode === "delete" || effectiveMode === "confirm" || effectiveMode === "unconfirm" || effectiveMode === "move") {
@@ -169,6 +187,9 @@ export function CorrectionModal({
       onClose();
     } catch (err) {
       console.error("[Modal] Error submitting correction:", err);
+      // Extract error message from the error object
+      const errorMessage = err instanceof Error ? err.message : "Failed to submit correction. Please try again.";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -439,12 +460,42 @@ export function CorrectionModal({
               </div>
             )}
 
-            {/* Reason - optional, show when action selected */}
+            {/* File Upload - show when action selected */}
             {(!showOptionsUI || internalMode === "confirm" || internalMode === "unconfirm" || internalMode === "delete") && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Reason <span className="text-gray-500 text-xs">(optional)</span>
+                  Screenshots & Files <span className="text-gray-500 text-xs">(optional)</span>
                 </label>
+                <SessionFileUpload
+                  sessionId={sessionId}
+                  onUploadComplete={(attachment) => setAttachments([...attachments, attachment])}
+                  onRemove={(attachment) => setAttachments(attachments.filter(a => a.id !== attachment.id))}
+                  attachments={attachments}
+                  maxFiles={5}
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
+
+            {/* Reason - optional, show when action selected */}
+            {(!showOptionsUI || internalMode === "confirm" || internalMode === "unconfirm" || internalMode === "delete") && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Reason <span className="text-gray-500 text-xs">(optional)</span>
+                  </label>
+                  <span
+                    className={`text-xs font-medium ${
+                      reason.length > MAX_REASON_LENGTH
+                        ? "text-red-400"
+                        : reason.length > MAX_REASON_LENGTH * 0.9
+                        ? "text-yellow-400"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    {reason.length}/{MAX_REASON_LENGTH}
+                  </span>
+                </div>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -459,9 +510,13 @@ export function CorrectionModal({
                       ? "Why are you reverting this confirmation?"
                       : "Why are you modifying this?"
                   }
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg
-                           text-white placeholder-gray-500 focus:outline-none focus:border-blue-500
-                           resize-none"
+                  className={`w-full px-3 py-2 bg-gray-800 rounded-lg
+                           text-white placeholder-gray-500 focus:outline-none
+                           resize-none border ${
+                             reason.length > MAX_REASON_LENGTH
+                               ? "border-red-500 focus:border-red-500"
+                               : "border-gray-700 focus:border-blue-500"
+                           }`}
                   rows={3}
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -470,6 +525,18 @@ export function CorrectionModal({
               </div>
             )}
           </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="px-6 pb-4">
+              <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 flex items-start gap-2">
+                <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-sm text-red-200">{error}</div>
+              </div>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-800 flex justify-end gap-3">
@@ -485,7 +552,7 @@ export function CorrectionModal({
             {(!showOptionsUI || internalMode === "confirm" || internalMode === "unconfirm" || internalMode === "delete") && (
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || reason.length > MAX_REASON_LENGTH}
                 className={`px-4 py-2 text-white rounded-lg font-medium transition-colors
                          disabled:opacity-50 flex items-center gap-2 ${getModeColor()}`}
               >

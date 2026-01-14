@@ -45,6 +45,7 @@ model User {
 
   // Pattern Tool relations
   createdSessions  PatternSession[]   @relation("SessionCreator")
+  implementedSessions PatternSession[] @relation("ImplementedSessions")
   sharedSessions   SessionShare[]
   corrections      PatternCorrection[]
   comments         PatternComment[]
@@ -172,10 +173,17 @@ model PatternSession {
   shares         SessionShare[]
 
   // Status
-  status         String   @default("active") // active, completed, archived
+  status         String   @default("active") // active, completed, archived, submitted_for_review, implemented
 
   // Metadata
   description    String?  @db.Text
+
+  // Feedback System
+  feedbackType   String?  // "how-i-do-it" (pre-release explanation) or "algorithm-correction" (released indicator feedback)
+  submittedForReviewAt DateTime?
+  implementedAt  DateTime?
+  implementedBy  String?
+  implementedByUser User? @relation("ImplementedSessions", fields: [implementedBy], references: [id])
 
   // Timestamps
   createdAt      DateTime @default(now())
@@ -190,6 +198,7 @@ model PatternSession {
   @@index([createdById, status])
   @@index([patternType, status])
   @@index([createdAt])
+  @@index([status, submittedForReviewAt])
 }
 
 model SessionShare {

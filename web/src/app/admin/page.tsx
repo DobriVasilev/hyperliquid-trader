@@ -27,6 +27,9 @@ interface Session {
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  feedbackType: string | null;
+  submittedForReviewAt: string | null;
+  implementedAt: string | null;
   createdBy: {
     id: string;
     name: string | null;
@@ -56,14 +59,16 @@ export default function AdminPage() {
   const { data: authSession, status } = useSession();
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "sessions">("sessions");
+  const [activeTab, setActiveTab] = useState<"overview" | "users" | "sessions" | "feedback">("feedback");
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "withFeedback">("all");
+  const [feedbackFilter, setFeedbackFilter] = useState<"pending" | "implemented" | "all">("pending");
   const [exporting, setExporting] = useState<string | null>(null);
+  const [implementing, setImplementing] = useState<string | null>(null);
 
   // Fetch data based on active tab
   useEffect(() => {
@@ -107,18 +112,34 @@ export default function AdminPage() {
     fetchData();
   }, [activeTab, authSession, status, router]);
 
-  // Quick export function
+  // Export prompt function
   const handleExport = async (sessionId: string) => {
     setExporting(sessionId);
     try {
-      const response = await fetch(`/api/sessions/${sessionId}/export`);
+      const response = await fetch(`/api/sessions/${sessionId}/export-prompt`, {
+        method: "POST",
+      });
       const data = await response.json();
 
       if (data.success) {
-        // Copy to clipboard
-        const exportText = JSON.stringify(data.data, null, 2);
+        // Create full export text with prompt and JSON
+        const exportText = `${data.prompt}\n\n---\n\nJSON Data (download and reference this):\n${JSON.stringify(data.jsonExport, null, 2)}`;
+
+        // Copy prompt to clipboard
         await navigator.clipboard.writeText(exportText);
-        alert("Exported data copied to clipboard!");
+
+        // Also trigger JSON download
+        const blob = new Blob([JSON.stringify(data.jsonExport, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${data.sessionName}-feedback.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        alert("Prompt copied to clipboard and JSON downloaded!");
       } else {
         alert("Export failed: " + data.error);
       }
@@ -126,6 +147,33 @@ export default function AdminPage() {
       alert("Export failed");
     } finally {
       setExporting(null);
+    }
+  };
+
+  // Mark as implemented function
+  const handleMarkImplemented = async (sessionId: string) => {
+    if (!confirm("Mark this feedback as implemented? This will send an email notification to the user.")) {
+      return;
+    }
+
+    setImplementing(sessionId);
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/mark-implemented`, {
+        method: "POST",
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        alert("Marked as implemented! Email sent to user.");
+        // Refresh data
+        window.location.reload();
+      } else {
+        alert("Failed: " + data.error);
+      }
+    } catch {
+      alert("Failed to mark as implemented");
+    } finally {
+      setImplementing(null);
     }
   };
 
@@ -181,7 +229,7 @@ export default function AdminPage() {
       <div className="bg-gray-900/50 border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-1">
-            {(["sessions", "users", "overview"] as const).map((tab) => (
+            {(["feedback", "sessions", "users", "overview"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -210,6 +258,171 @@ export default function AdminPage() {
           </div>
         ) : (
           <>
+            {/* Feedback Tab */}
+            {activeTab === "feedback" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold mb-2">User Feedback</h2>
+                    <p className="text-sm text-gray-400">Sessions with corrections or comments</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setFeedbackFilter("pending")}
+                      className={`px-3 py-1.5 text-sm rounded ${
+                        feedbackFilter === "pending"
+                          ? "bg-yellow-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      Pending ({sessions.filter((s) => s.hasFeedback && s.status !== "implemented").length})
+                    </button>
+                    <button
+                      onClick={() => setFeedbackFilter("implemented")}
+                      className={`px-3 py-1.5 text-sm rounded ${
+                        feedbackFilter === "implemented"
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      Done ({sessions.filter((s) => s.status === "implemented").length})
+                    </button>
+                    <button
+                      onClick={() => setFeedbackFilter("all")}
+                      className={`px-3 py-1.5 text-sm rounded ${
+                        feedbackFilter === "all"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      All ({sessions.filter((s) => s.hasFeedback).length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feedback sessions list */}
+                <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-800/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Session</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Owner</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Feedback</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {sessions
+                        .filter((s) => {
+                          // Only show sessions with feedback (corrections or comments)
+                          if (!s.hasFeedback) return false;
+
+                          // Apply status filter
+                          if (feedbackFilter === "pending") return s.status !== "implemented";
+                          if (feedbackFilter === "implemented") return s.status === "implemented";
+                          return true; // "all"
+                        })
+                        .map((session) => (
+                          <tr key={session.id} className="hover:bg-gray-800/50">
+                            <td className="px-4 py-3">
+                              <div>
+                                <div className="font-medium">{session.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {session.symbol} • {session.timeframe} • {session.patternType}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {session.feedbackType === "how-i-do-it" ? (
+                                <span className="px-2 py-1 text-xs bg-purple-900/50 text-purple-300 rounded">
+                                  🔮 Pre-Release
+                                </span>
+                              ) : session.feedbackType === "algorithm-correction" ? (
+                                <span className="px-2 py-1 text-xs bg-blue-900/50 text-blue-300 rounded">
+                                  🔧 Algorithm Fix
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">
+                                  General
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                {session.createdBy.image ? (
+                                  <img src={session.createdBy.image} alt="" className="w-6 h-6 rounded-full" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-gray-700" />
+                                )}
+                                <span className="text-sm">{session.createdBy.name || session.createdBy.email}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-1 text-xs bg-green-900/50 text-green-300 rounded">
+                                {session.feedbackCount} items
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {session.status === "implemented" ? (
+                                <span className="px-2 py-1 text-xs bg-green-900/50 text-green-300 rounded">
+                                  ✓ Done
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 text-xs bg-yellow-900/50 text-yellow-300 rounded">
+                                  ⏳ Pending
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/sessions/${session.id}`}
+                                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                                >
+                                  View
+                                </Link>
+                                <button
+                                  onClick={() => handleExport(session.id)}
+                                  disabled={exporting === session.id}
+                                  className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded transition-colors disabled:opacity-50"
+                                >
+                                  {exporting === session.id ? "..." : "Export"}
+                                </button>
+                                {session.status !== "implemented" && (
+                                  <button
+                                    onClick={() => handleMarkImplemented(session.id)}
+                                    disabled={implementing === session.id}
+                                    className="px-2 py-1 text-xs bg-green-600 hover:bg-green-500 rounded transition-colors disabled:opacity-50"
+                                  >
+                                    {implementing === session.id ? "..." : "Done"}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {sessions.filter((s) => {
+                    if (!s.hasFeedback) return false;
+                    if (feedbackFilter === "pending") return s.status !== "implemented";
+                    if (feedbackFilter === "implemented") return s.status === "implemented";
+                    return true;
+                  }).length === 0 && (
+                    <div className="p-8 text-center text-gray-500">
+                      {feedbackFilter === "implemented"
+                        ? "No implemented feedback yet"
+                        : feedbackFilter === "pending"
+                        ? "No pending feedback - all caught up!"
+                        : "No feedback yet - users haven't added corrections or comments to their sessions"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Overview Tab */}
             {activeTab === "overview" && stats && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -42,7 +42,7 @@ interface ThreadedCommentProps {
   comment: ThreadedCommentData;
   sessionId: string;
   currentUserId?: string;
-  onReply: (content: string, parentId: string) => Promise<void>;
+  onReply: (content: string, parentId: string, attachments?: { id: string; url: string; name: string; size: number; type: string; category: string }[]) => Promise<void>;
   onEdit?: (commentId: string, content: string) => Promise<void>;
   onDelete?: (commentId: string) => Promise<void>;
   onShare?: (commentId: string) => void;
@@ -95,8 +95,8 @@ export function ThreadedComment({
   const hasReplies = comment.replies && comment.replies.length > 0;
   const totalChildren = useMemo(() => countChildren(comment), [comment]);
 
-  const handleReply = async (content: string) => {
-    await onReply(content, comment.id);
+  const handleReply = async (content: string, attachments?: { id: string; url: string; name: string; size: number; type: string; category: string }[]) => {
+    await onReply(content, comment.id, attachments);
     setShowReplyInput(false);
   };
 
@@ -305,6 +305,7 @@ export function ThreadedComment({
             {showReplyInput && (
               <div className="mt-3 ml-4">
                 <CommentInput
+                  sessionId={sessionId}
                   onSubmit={handleReply}
                   placeholder="Write a reply..."
                   autoFocus

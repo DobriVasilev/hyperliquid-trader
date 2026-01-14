@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
@@ -241,15 +241,64 @@ export default function TradingPage() {
                 {isLoading ? "Refreshing..." : "Refresh"}
               </button>
             )}
-            <div className="flex items-center gap-2">
-              {session.user?.image && (
-                <img
-                  src={session.user.image}
-                  alt=""
-                  className="w-8 h-8 rounded-full"
-                />
-              )}
-              <span className="text-sm text-gray-400">{session.user?.name}</span>
+            <div className="relative group">
+              <button className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-800 transition-colors">
+                {session?.user?.image ? (
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name || ""}
+                    className="w-8 h-8 rounded-full"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-medium">
+                    {session?.user?.name?.charAt(0) || "U"}
+                  </div>
+                )}
+              </button>
+              {/* Dropdown */}
+              <div className="absolute right-0 top-full mt-1 w-48 bg-gray-900 rounded-lg shadow-xl border border-gray-800 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                <div className="p-3 border-b border-gray-800">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{session?.user?.name}</span>
+                    {session?.user?.role === "admin" && (
+                      <span className="px-1.5 py-0.5 text-[10px] bg-red-900/50 text-red-300 rounded">ADMIN</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate">{session?.user?.email}</div>
+                </div>
+                <div className="p-1">
+                  {session?.user?.role === "admin" && (
+                    <Link
+                      href="/admin"
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-800 rounded-md transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Admin Panel
+                    </Link>
+                  )}
+                  <Link
+                    href="/trading/settings"
+                    className="block px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                  >
+                    Trading Settings
+                  </Link>
+                  <Link
+                    href="/dashboard"
+                    className="block px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    onClick={() => signOut({ callbackUrl: "/" })}
+                    className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-gray-800 rounded-md transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

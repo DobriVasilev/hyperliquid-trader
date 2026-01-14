@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { SessionFileUpload, SessionAttachment } from "@/components/sessions/SessionFileUpload";
 
 interface CommentInputProps {
-  onSubmit: (content: string) => Promise<void>;
+  sessionId: string;
+  onSubmit: (content: string, attachments?: SessionAttachment[]) => Promise<void>;
   placeholder?: string;
   autoFocus?: boolean;
   onCancel?: () => void;
@@ -11,6 +13,7 @@ interface CommentInputProps {
 }
 
 export function CommentInput({
+  sessionId,
   onSubmit,
   placeholder = "Add a comment...",
   autoFocus = false,
@@ -19,6 +22,7 @@ export function CommentInput({
 }: CommentInputProps) {
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attachments, setAttachments] = useState<SessionAttachment[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,8 +30,9 @@ export function CommentInput({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(content.trim());
+      await onSubmit(content.trim(), attachments.length > 0 ? attachments : undefined);
       setContent("");
+      setAttachments([]);
     } catch (err) {
       console.error("Error submitting comment:", err);
     } finally {
@@ -57,6 +62,14 @@ export function CommentInput({
                  text-white text-sm placeholder-gray-500 focus:outline-none
                  focus:border-blue-500 resize-none"
         rows={2}
+        disabled={isSubmitting}
+      />
+      <SessionFileUpload
+        sessionId={sessionId}
+        onUploadComplete={(attachment) => setAttachments([...attachments, attachment])}
+        onRemove={(attachment) => setAttachments(attachments.filter(a => a.id !== attachment.id))}
+        attachments={attachments}
+        maxFiles={5}
         disabled={isSubmitting}
       />
       <div className="flex items-center justify-end gap-2">

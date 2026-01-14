@@ -63,11 +63,21 @@ export const detectionActionSchema = z.discriminatedUnion("action", [
   addManualDetectionSchema,
 ]);
 
+// Session attachment schema (for screenshots, videos, documents)
+export const sessionAttachmentSchema = z.object({
+  id: z.string().min(1),
+  url: z.string().url(),
+  name: z.string().min(1).max(255),
+  size: z.number().int().min(1),
+  type: z.string().min(1),
+  category: z.enum(["image", "video", "document"]),
+});
+
 // Correction schemas - matches actual API usage
 export const createCorrectionSchema = z.object({
   detectionId: z.string().min(1).optional().nullable(),
   correctionType: z.enum(["move", "delete", "add", "confirm", "unconfirm"]),
-  reason: z.string().max(1000).optional().default(""),
+  reason: z.string().max(5000).optional().default(""),
   // For move/delete corrections - original values
   originalIndex: z.number().int().min(0).optional().nullable(),
   originalTime: z.string().or(z.number()).optional().nullable(),
@@ -79,6 +89,8 @@ export const createCorrectionSchema = z.object({
   correctedPrice: z.number().positive().optional().nullable(),
   correctedType: detectionTypeEnum.optional().nullable(),
   correctedStructure: structureTypeEnum.optional().nullable(),
+  // Attachments (screenshots, videos, documents)
+  attachments: z.array(sessionAttachmentSchema).max(10).optional(),
 });
 
 // Comment schemas
@@ -90,6 +102,7 @@ export const createCommentSchema = z.object({
   candleTime: z.string().or(z.number()).optional().nullable(),
   canvasX: z.number().optional().nullable(),
   canvasY: z.number().optional().nullable(),
+  attachments: z.array(sessionAttachmentSchema).max(10).optional(),
 });
 
 export const updateCommentSchema = z.object({

@@ -108,6 +108,7 @@ export async function POST(
       correctedPrice,
       correctedType,
       correctedStructure,
+      attachments,
     } = validation.data;
 
     // Check access with edit permission
@@ -160,6 +161,7 @@ export async function POST(
           correctedType: correctedType || null,
           correctedStructure: correctedStructure || null,
           status: "pending",
+          attachments: attachments ? JSON.parse(JSON.stringify(attachments)) : null,
           metadata: JSON.parse(JSON.stringify({
             originalStatus: originalDetectionStatus, // Store for undo support
           })),

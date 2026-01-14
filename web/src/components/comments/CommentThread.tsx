@@ -6,7 +6,8 @@ import { PatternComment } from "@/hooks/useSession";
 
 interface CommentThreadProps {
   comment: PatternComment;
-  onReply: (content: string, parentId: string) => Promise<void>;
+  sessionId: string;
+  onReply: (content: string, parentId: string, attachments?: { id: string; url: string; name: string; size: number; type: string; category: string }[]) => Promise<void>;
   onResolve: (commentId: string, resolved: boolean) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
   onNavigateToDetection?: (detectionId: string) => void;
@@ -34,6 +35,7 @@ function formatDate(dateString: string): string {
 
 export function CommentThread({
   comment,
+  sessionId,
   onReply,
   onResolve,
   onDelete,
@@ -43,8 +45,8 @@ export function CommentThread({
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleReply = async (content: string) => {
-    await onReply(content, comment.id);
+  const handleReply = async (content: string, attachments?: { id: string; url: string; name: string; size: number; type: string; category: string }[]) => {
+    await onReply(content, comment.id, attachments);
     setShowReplyInput(false);
   };
 
@@ -143,6 +145,7 @@ export function CommentThread({
           {showReplyInput && (
             <div className="mt-3">
               <CommentInput
+                sessionId={sessionId}
                 onSubmit={handleReply}
                 placeholder="Write a reply..."
                 autoFocus

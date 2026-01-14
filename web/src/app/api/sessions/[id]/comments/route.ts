@@ -239,6 +239,7 @@ export async function POST(
       candleTime,
       canvasX,
       canvasY,
+      attachments,
     } = validation.data;
 
     // Check access (view permission is enough for comments)
@@ -291,6 +292,7 @@ export async function POST(
         canvasY: canvasY || null,
         depth,
         path: path ? `${path}/${commentId}` : commentId,
+        attachments: attachments ? JSON.parse(JSON.stringify(attachments)) : null,
       },
       include: {
         user: {
