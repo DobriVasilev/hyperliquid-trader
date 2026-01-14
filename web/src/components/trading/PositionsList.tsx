@@ -219,7 +219,7 @@ export function PositionsList({
                     {order.side === "B" ? "BUY" : "SELL"}
                   </span>
                   <span className="text-sm text-gray-400">
-                    {order.size} @ ${order.price.toFixed(2)}
+                    {order.size} @ {typeof order.price === 'number' ? `$${order.price.toFixed(2)}` : order.price}
                   </span>
                   <span className="text-xs text-gray-500">{order.orderType}</span>
                 </div>
