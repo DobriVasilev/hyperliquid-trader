@@ -796,7 +796,12 @@ function ChatPageContent() {
       }
     } catch (error) {
       console.error("Error sending voice message:", error);
-      alert("Failed to send voice message. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Failed to send voice message";
+      if (errorMessage.includes("Permission") || errorMessage.includes("NotAllowed")) {
+        alert("Failed to send voice message. Please check microphone permissions in your browser settings.");
+      } else {
+        alert("Failed to send voice message. Please try again.");
+      }
     } finally {
       setIsSending(false);
     }
