@@ -59,6 +59,7 @@ export function UserProfileSidebar({
   const [commonGroups, setCommonGroups] = useState<CommonGroup[]>([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Fetch shared media when user changes
   useEffect(() => {
@@ -67,6 +68,21 @@ export function UserProfileSidebar({
       fetchCommonGroups();
     }
   }, [isOpen, user]);
+
+  // Close more menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showMoreMenu) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.more-menu-container')) {
+          setShowMoreMenu(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMoreMenu]);
 
   const fetchSharedMedia = async () => {
     setIsLoadingMedia(true);
@@ -289,17 +305,76 @@ export function UserProfileSidebar({
             </button>
           )}
 
-          <button className="flex flex-col items-center gap-1" style={{ color: TELEGRAM_COLORS.hint }}>
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: TELEGRAM_COLORS.secondaryBg }}
+          <div className="relative more-menu-container">
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className="flex flex-col items-center gap-1"
+              style={{ color: TELEGRAM_COLORS.hint }}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </div>
-            <span className="text-xs">More</span>
-          </button>
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: TELEGRAM_COLORS.secondaryBg }}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </div>
+              <span className="text-xs">More</span>
+            </button>
+
+            {/* More dropdown menu */}
+            {showMoreMenu && (
+              <div
+                className="absolute bottom-full right-0 mb-2 w-48 rounded-lg shadow-xl border z-10"
+                style={{
+                  backgroundColor: TELEGRAM_COLORS.bgColor,
+                  borderColor: TELEGRAM_COLORS.border
+                }}
+              >
+                <button
+                  onClick={() => {
+                    alert("Search feature coming soon!");
+                    setShowMoreMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 hover:opacity-80"
+                  style={{ color: TELEGRAM_COLORS.text }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  Search in Chat
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm("Clear all messages in this conversation?")) {
+                      alert("Clear history feature coming soon!");
+                    }
+                    setShowMoreMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 hover:opacity-80"
+                  style={{ color: TELEGRAM_COLORS.text }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Clear History
+                </button>
+                <button
+                  onClick={() => {
+                    alert("Export chat feature coming soon!");
+                    setShowMoreMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 hover:opacity-80"
+                  style={{ color: TELEGRAM_COLORS.text }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export Chat
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Shared Media Section */}

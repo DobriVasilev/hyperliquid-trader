@@ -245,12 +245,12 @@ function MessageBubbleComponent({
       }}
       onClick={handleTap}
       onTouchStart={(e) => {
-        handleTouchStart(e);
+        handleTouchStart();
         handleTouchStartSwipe(e);
       }}
       onTouchMove={handleTouchMoveSwipe}
-      onTouchEnd={(e) => {
-        handleTouchEnd(e);
+      onTouchEnd={() => {
+        handleTouchEnd();
         handleTouchEndSwipe();
       }}
       onMouseEnter={() => setShowActions(true)}
