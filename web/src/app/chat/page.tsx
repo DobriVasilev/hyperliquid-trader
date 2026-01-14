@@ -2468,6 +2468,12 @@ function ChatPageContent() {
             setSelectedDM(selectedProfileUser.id);
           }
         }}
+        onAddFriend={() => {
+          if (selectedProfileUser) {
+            setSendRequestUserId(selectedProfileUser.id);
+            setShowSendRequestModal(true);
+          }
+        }}
       />
 
       {/* Admin Panel */}
@@ -2570,18 +2576,29 @@ function ChatPageContent() {
           setShowSendRequestModal(false);
           setSendRequestUserId(null);
         }}
-        targetUser={sendRequestUserId ? {
+        targetUser={sendRequestUserId && selectedProfileUser?.id === sendRequestUserId ? {
+          id: selectedProfileUser.id,
+          name: selectedProfileUser.name,
+          email: selectedProfileUser.email || "",
+          image: selectedProfileUser.image,
+        } : sendRequestUserId ? {
           id: sendRequestUserId,
           name: null,
           email: "",
           image: null,
         } : null}
         onSend={async (userId, message) => {
-          await fetch("/api/chat/friends", {
+          const res = await fetch("/api/chat/friends", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ receiverId: userId, message }),
           });
+          const result = await res.json();
+          if (result.success) {
+            alert(result.message || "Friend request sent!");
+          } else {
+            alert(result.error || "Failed to send friend request");
+          }
           setShowSendRequestModal(false);
           setSendRequestUserId(null);
         }}

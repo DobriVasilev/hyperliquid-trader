@@ -48,6 +48,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
               "connect-src 'self' https://*.upstash.io https://*.r2.dev https://*.neon.tech wss:",
+              "media-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -56,7 +57,7 @@ const nextConfig: NextConfig = {
           // Permissions Policy
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(self), geolocation=(), interest-cohort=()",
+            value: "camera=(self), microphone=(self), geolocation=(), interest-cohort=()",
           },
         ],
       },
