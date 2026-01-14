@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { X, Upload, File, Image, Video, Music, FileText, Archive, Check, AlertCircle } from "lucide-react";
+import { X, Upload, File, Image, Video, Music, FileText, Archive, Check, AlertCircle, Paperclip } from "lucide-react";
 
 interface FileUploadProps {
   channelId?: string | null;
@@ -566,14 +566,18 @@ export function InlineUploadButton({
         type="button"
         onClick={() => fileInputRef.current?.click()}
         disabled={disabled || isUploading}
-        className={`
-          p-2 rounded-lg transition-colors
-          ${isUploading ? "text-blue-400 animate-pulse" : "text-gray-500 hover:text-gray-300 hover:bg-gray-800"}
-          ${disabled ? "opacity-50 cursor-not-allowed" : ""}
-        `}
-        title="Upload file"
+        className="p-3 rounded-full transition-colors hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ color: "#8E8E93" }}
+        title="Attach file"
       >
-        <Upload className="w-5 h-5" />
+        {isUploading ? (
+          <div
+            className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: "#0088cc", borderTopColor: "transparent" }}
+          />
+        ) : (
+          <Paperclip className="w-6 h-6" />
+        )}
       </button>
     </>
   );

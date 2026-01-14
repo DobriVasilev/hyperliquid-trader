@@ -81,7 +81,7 @@ export async function DELETE() {
 
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { preferences: restPrefs },
+      data: { preferences: restPrefs as any },
     });
 
     return NextResponse.json({

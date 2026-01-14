@@ -32,6 +32,7 @@
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
     "framer-motion": "^12.24.0",
+    "googleapis": "^170.0.0",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
@@ -40,6 +41,8 @@
     "prisma": "^6.19.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "ulid": "^3.0.2",
     "zod": "^4.3.5",
     "zustand": "^5.0.9"

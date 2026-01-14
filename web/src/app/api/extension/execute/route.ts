@@ -218,6 +218,7 @@ export async function POST(request: NextRequest) {
       date: now.toLocaleDateString(),
       time: now.toLocaleTimeString(),
       coin: extensionKey.asset,
+      direction,
       orderType: 'Market',
       entry,
       sl: stopLoss,

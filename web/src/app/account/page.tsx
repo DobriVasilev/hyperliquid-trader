@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { usePreferences } from "@/hooks/usePreferences";
+import { AppHeader } from "@/components/layout/AppHeader";
 
 // Toggle switch component
 function Toggle({
@@ -73,7 +74,7 @@ function Select({
 
 export default function AccountPage() {
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "data">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "trading" | "integrations" | "data">("profile");
   const {
     preferences,
     isLoading: prefsLoading,
@@ -165,22 +166,7 @@ export default function AccountPage() {
 
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
-      {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-xl font-bold">
-              Systems Trader
-            </Link>
-            <span className="text-gray-500">/</span>
-            <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors">
-              Dashboard
-            </Link>
-            <span className="text-gray-500">/</span>
-            <span className="text-gray-400">Account</span>
-          </div>
-        </div>
-      </header>
+      <AppHeader title="Account Settings" />
 
       {/* Content */}
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -227,6 +213,26 @@ export default function AccountPage() {
             }`}
           >
             Preferences
+          </button>
+          <button
+            onClick={() => setActiveTab("trading")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === "trading"
+                ? "bg-gray-800 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Trading
+          </button>
+          <button
+            onClick={() => setActiveTab("integrations")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === "integrations"
+                ? "bg-gray-800 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Integrations
           </button>
           <button
             onClick={() => setActiveTab("data")}
@@ -425,6 +431,121 @@ export default function AccountPage() {
                 Saving...
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "trading" && (
+          <div className="space-y-4">
+            {/* Wallets Section */}
+            <div className="bg-gray-900 rounded-lg border border-gray-800">
+              <div className="p-4 border-b border-gray-800">
+                <h2 className="font-semibold">Trading Wallets</h2>
+                <p className="text-sm text-gray-500">Manage your trading wallets and view balances</p>
+              </div>
+              <div className="p-4">
+                <Link
+                  href="/trading"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Manage Wallets
+                </Link>
+              </div>
+            </div>
+
+            {/* Extension API Keys Section */}
+            <div className="bg-gray-900 rounded-lg border border-gray-800">
+              <div className="p-4 border-b border-gray-800">
+                <h2 className="font-semibold">TradingView Extension</h2>
+                <p className="text-sm text-gray-500">API keys for TradingView Bridge extension</p>
+              </div>
+              <div className="p-4">
+                <Link
+                  href="/trading/settings"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Manage Extension Keys
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+
+            {/* Risk Management */}
+            <div className="bg-gray-900 rounded-lg border border-gray-800">
+              <div className="p-4 border-b border-gray-800">
+                <h2 className="font-semibold">Risk Management</h2>
+                <p className="text-sm text-gray-500">Configure default risk parameters for new trades</p>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Default Risk Amount</label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg"
+                      placeholder="1.00"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Default Leverage</label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg"
+                      placeholder="25"
+                      min="1"
+                      max="100"
+                    />
+                  </div>
+                </div>
+                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors">
+                  Save Risk Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "integrations" && (
+          <div className="space-y-4">
+            {/* Google Sheets Section */}
+            <div className="bg-gray-900 rounded-lg border border-gray-800">
+              <div className="p-4 border-b border-gray-800">
+                <h2 className="font-semibold">Google Sheets Integration</h2>
+                <p className="text-sm text-gray-500">Auto-export trades to your personal trading log spreadsheet</p>
+              </div>
+              <div className="p-4">
+                <div className="text-sm text-gray-400 mb-4">
+                  Connect your Google account to automatically log trades to a Google Sheets trading journal with formulas for P&L tracking, risk analysis, and performance metrics.
+                </div>
+                <Link
+                  href="/trading"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Configure Google Sheets
+                </Link>
+              </div>
+            </div>
+
+            {/* Future Integrations */}
+            <div className="bg-gray-900 rounded-lg border border-gray-800">
+              <div className="p-4 border-b border-gray-800">
+                <h2 className="font-semibold">More Integrations</h2>
+                <p className="text-sm text-gray-500">Connect with other platforms and tools</p>
+              </div>
+              <div className="p-4">
+                <div className="text-sm text-gray-500">
+                  Additional integrations coming soon...
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

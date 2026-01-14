@@ -36,12 +36,12 @@ export async function POST(request: NextRequest) {
     try {
       if (isUsingTradingApi()) {
         const posResult = await tradingApi.getPositions(wallet.encryptedKey);
-        if (posResult.success && posResult.data?.success) {
-          currentPositions = posResult.data.positions || [];
+        if (posResult.success && posResult.data) {
+          currentPositions = posResult.data;
         }
       } else if (client) {
         const posResult = await client.getPositions();
-        currentPositions = posResult.positions || [];
+        currentPositions = posResult || [];
       }
     } catch (err) {
       console.error('Failed to fetch positions before close:', err);
