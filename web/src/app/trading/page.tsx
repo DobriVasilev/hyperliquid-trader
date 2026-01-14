@@ -10,6 +10,7 @@ import { WalletManager } from "@/components/trading/WalletManager";
 import { AccountOverview } from "@/components/trading/AccountOverview";
 import { TradingFormPnl } from "@/components/trading/TradingFormPnl";
 import { PositionsList } from "@/components/trading/PositionsList";
+import { TradingSettingsPanel } from "@/components/trading/TradingSettingsPanel";
 import { useAppStore } from "@/stores/appStore";
 
 interface Wallet {
@@ -350,6 +351,9 @@ export default function TradingPage() {
             {isConnected && (
               <AccountOverview account={account} isLoading={isLoading} />
             )}
+
+            {/* Trading Settings */}
+            <TradingSettingsPanel />
           </div>
 
           {/* Center - Positions & Orders */}

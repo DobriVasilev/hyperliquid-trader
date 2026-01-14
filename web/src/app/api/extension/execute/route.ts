@@ -16,6 +16,7 @@ import {
   calculatePositionSize,
   verifyAndAdjustPnl,
 } from '@/lib/position-sizing';
+import { sendTradeOpenToSheets } from '@/lib/google-sheets-sync';
 
 interface ExecuteTradeRequest {
   direction: 'long' | 'short';
@@ -209,6 +210,21 @@ export async function POST(request: NextRequest) {
       where: { id: extensionKey.id },
       data: { lastUsedAt: new Date() },
     });
+
+    // Send to Google Sheets (fire and forget)
+    const now = new Date();
+    sendTradeOpenToSheets({
+      userId: extensionKey.userId,
+      date: now.toLocaleDateString(),
+      time: now.toLocaleTimeString(),
+      coin: extensionKey.asset,
+      orderType: 'Market',
+      entry,
+      sl: stopLoss,
+      risk,
+      expectedLoss: -risk,
+      positionSize: finalQty,
+    }).catch(err => console.error('Google Sheets sync error:', err));
 
     return NextResponse.json({
       success: true,

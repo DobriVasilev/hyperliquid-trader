@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getWalletClient, isUsingTradingApi, tradingApi } from '@/lib/trading-client';
+import { sendTradeCloseToSheets } from '@/lib/google-sheets-sync';
 
 interface CloseRequest {
   walletId?: string;
@@ -29,6 +30,22 @@ export async function POST(request: NextRequest) {
       session.user.id,
       walletId || null
     );
+
+    // Fetch current positions to get mark price (exit price) before closing
+    let currentPositions: any[] = [];
+    try {
+      if (isUsingTradingApi()) {
+        const posResult = await tradingApi.getPositions(wallet.encryptedKey);
+        if (posResult.success && posResult.data?.success) {
+          currentPositions = posResult.data.positions || [];
+        }
+      } else if (client) {
+        const posResult = await client.getPositions();
+        currentPositions = posResult.positions || [];
+      }
+    } catch (err) {
+      console.error('Failed to fetch positions before close:', err);
+    }
 
     let result: { success: boolean; error?: string };
 
@@ -66,11 +83,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update trades in database
+    // Fetch trades before closing to get data for Google Sheets
     const updateWhere = symbol
-      ? { walletId: wallet.id, symbol, status: 'open' }
-      : { walletId: wallet.id, status: 'open' };
+      ? { walletId: wallet.id, symbol, status: 'open', userId: session.user.id }
+      : { walletId: wallet.id, status: 'open', userId: session.user.id };
 
+    const openTrades = await prisma.trade.findMany({
+      where: updateWhere,
+      select: {
+        id: true,
+        symbol: true,
+        entryPrice: true,
+        stopLoss: true,
+        exitPrice: true,
+        pnl: true,
+      },
+    });
+
+    // Update trades in database
     await prisma.trade.updateMany({
       where: updateWhere,
       data: {
@@ -78,6 +108,28 @@ export async function POST(request: NextRequest) {
         closedAt: new Date(),
       },
     });
+
+    // Send each closed trade to Google Sheets with current mark price as exit
+    for (const trade of openTrades) {
+      if (trade.entryPrice && trade.stopLoss) {
+        // Find the position that was just closed to get the exit price (mark price)
+        const position = currentPositions.find((p: any) => p.symbol === trade.symbol);
+        const exitPrice = position?.markPrice || position?.entryPrice || trade.entryPrice;
+
+        // Calculate PnL (rough estimate if we don't have exact size)
+        const pnl = trade.pnl || 0;
+
+        sendTradeCloseToSheets({
+          userId: session.user.id,
+          coin: trade.symbol,
+          entry: trade.entryPrice,
+          sl: trade.stopLoss,
+          exitPrice: exitPrice,
+          realizedLoss: pnl < 0 ? pnl : null,
+          realizedWin: pnl > 0 ? pnl : null,
+        }).catch(err => console.error('Google Sheets close sync error:', err));
+      }
+    }
 
     return NextResponse.json({
       success: true,
