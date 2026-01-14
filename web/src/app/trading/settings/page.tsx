@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { AppHeader } from "@/components/layout/AppHeader";
 
 interface ExtensionKey {
   id: string;
@@ -163,19 +164,7 @@ export default function TradingSettingsPage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/trading" className="text-gray-400 hover:text-white">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <h1 className="text-xl font-bold">Extension Settings</h1>
-          </div>
-        </div>
-      </header>
+      <AppHeader title="Extension Settings" />
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Alerts */}
