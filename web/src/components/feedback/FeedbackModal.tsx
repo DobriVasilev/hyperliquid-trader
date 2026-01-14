@@ -200,7 +200,7 @@ export function FeedbackModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div
         className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl"
-        style={{ backgroundColor: TELEGRAM_COLORS.bg }}
+        style={{ backgroundColor: TELEGRAM_COLORS.bgColor }}
       >
         {/* Header */}
         <div
@@ -346,7 +346,6 @@ export function FeedbackModal() {
                 backgroundColor: TELEGRAM_COLORS.secondaryBg,
                 border: `1px solid ${TELEGRAM_COLORS.border}`,
                 color: TELEGRAM_COLORS.text,
-                focusRingColor: TELEGRAM_COLORS.primary,
               }}
             />
           </div>
