@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       walletId || null
     );
 
-    let accountInfo;
+    let rawAccountInfo;
 
     if (isUsingTradingApi()) {
       // Remote mode: Call trading API
@@ -36,14 +36,22 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-      accountInfo = result.data;
+      rawAccountInfo = result.data;
     } else {
       // Local mode: Use Hyperliquid client directly
       if (!client) {
         return NextResponse.json({ error: 'Client not initialized' }, { status: 500 });
       }
-      accountInfo = await client.getAccountInfo();
+      rawAccountInfo = await client.getAccountInfo();
     }
+
+    // Map to frontend expected format
+    const accountInfo = {
+      accountValue: parseFloat(rawAccountInfo?.balance || '0'),
+      totalRawUsd: parseFloat(rawAccountInfo?.totalPositionValue || '0'),
+      totalMarginUsed: parseFloat(rawAccountInfo?.totalMarginUsed || '0'),
+      withdrawable: parseFloat(rawAccountInfo?.available || '0'),
+    };
 
     return NextResponse.json({
       success: true,
