@@ -37,6 +37,11 @@ export async function GET(request: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
+    // Get user's email from Google
+    const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
+    const userInfo = await oauth2.userinfo.get();
+    const userEmail = userInfo.data.email || "";
+
     // Create a new spreadsheet with the trading template
     const sheets = google.sheets({ version: "v4", auth: oauth2Client });
 
@@ -241,6 +246,7 @@ export async function GET(request: NextRequest) {
         expiryDate: tokens.expiry_date,
         spreadsheetId,
         spreadsheetUrl,
+        email: userEmail,
       },
     };
 

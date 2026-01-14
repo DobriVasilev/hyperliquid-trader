@@ -83,6 +83,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
     }
 
+    // Get user's default trading settings
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { preferences: true },
+    });
+    const preferences = (user?.preferences || {}) as Record<string, any>;
+
+    // Use user's defaults if not specified
+    const defaultAsset = asset || preferences.defaultAsset || 'BTC';
+    const defaultRisk = riskAmount || preferences.defaultRisk || 1.0;
+    const defaultLeverage = leverage || preferences.defaultLeverage || 25;
+
     // Generate new API key
     const apiKey = generateApiKey();
 
@@ -93,9 +105,9 @@ export async function POST(request: NextRequest) {
         walletId,
         key: apiKey,
         name,
-        asset: asset || 'BTC',
-        riskAmount: riskAmount || 1.0,
-        leverage: leverage || 25,
+        asset: defaultAsset,
+        riskAmount: defaultRisk,
+        leverage: defaultLeverage,
         walletPassword: walletPassword || null,
       },
     });

@@ -16,6 +16,7 @@ import { DetectionList } from "@/components/detections/DetectionList";
 import { WhyNoDetectionModal } from "@/components/detections/WhyNoDetectionModal";
 import { ShareModal } from "@/components/sharing/ShareModal";
 import { usePermalinks } from "@/hooks/usePermalinks";
+import { AppHeader } from "@/components/layout/AppHeader";
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -798,64 +799,7 @@ export default function SessionDetailPage({
 
   return (
     <main className="h-screen overflow-hidden bg-gray-950 text-gray-100 flex flex-col">
-      {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between relative">
-          <nav className="flex items-center gap-2 text-sm">
-            <Link href="/dashboard" className="font-semibold text-white hover:opacity-80 transition-opacity">
-              Systems Trader
-            </Link>
-            <span className="text-gray-600">/</span>
-            <Link href="/sessions" className="text-gray-400 hover:text-gray-200 transition-colors">
-              Sessions
-            </Link>
-            <span className="text-gray-600">/</span>
-            <span className="text-gray-300">
-              {isLoading ? "Loading..." : session?.name || "Session"}
-            </span>
-          </nav>
-          <div className="flex items-center gap-3">
-            {/* Admin Link */}
-            {authSession?.user?.role === "admin" && (
-              <Link
-                href="/admin"
-                className="px-2 py-1 text-xs bg-red-900/50 text-red-300 rounded hover:bg-red-800/50 transition-colors"
-              >
-                Admin
-              </Link>
-            )}
-
-            {/* Online Users */}
-            <OnlineUsers users={onlineUsers} isConnected={isConnected} />
-
-            {session && (
-              <>
-                <div className="h-4 w-px bg-gray-700" />
-                <button
-                  onClick={runDetection}
-                  disabled={isLoading || isRunningDetection || candles.length === 0}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium
-                           hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isRunningDetection ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Running...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Run Detection
-                    </>
-                  )}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader title={isLoading ? "Loading..." : session?.name || "Session"} />
 
       {/* Session Info Bar */}
       {session && (
@@ -882,6 +826,29 @@ export default function SessionDetailPage({
               <span>{session._count.comments} comments</span>
             </div>
             <div className="ml-auto flex items-center gap-4">
+              {/* Online Users */}
+              <OnlineUsers users={onlineUsers} isConnected={isConnected} />
+
+              <button
+                onClick={runDetection}
+                disabled={isLoading || isRunningDetection || candles.length === 0}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isRunningDetection ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Run Detection
+                  </>
+                )}
+              </button>
+
               <button
                 onClick={() => setIsPatternReasoningOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-900/50 hover:bg-blue-800/50 text-blue-300 rounded-lg transition-colors"
@@ -913,20 +880,6 @@ export default function SessionDetailPage({
                 </svg>
                 Share
               </button>
-              <div className="flex items-center gap-2">
-                {session.createdBy.image ? (
-                  <img
-                    src={session.createdBy.image}
-                    alt={session.createdBy.name || ""}
-                    className="w-5 h-5 rounded-full"
-                  />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-gray-700" />
-                )}
-                <span className="text-gray-400">
-                  {session.createdBy.name || session.createdBy.email}
-                </span>
-              </div>
             </div>
           </div>
         </div>
