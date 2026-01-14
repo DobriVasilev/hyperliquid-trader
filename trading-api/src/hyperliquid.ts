@@ -261,6 +261,16 @@ export class HyperliquidClient {
     });
     const state = (await response.json()) as ClearinghouseResponse;
 
+    // Debug logging
+    console.log('[Trading API Hyperliquid] getAccountInfo for:', this.walletAddress);
+    console.log('[Trading API Hyperliquid] clearinghouseState response:', {
+      hasMarginSummary: !!state?.marginSummary,
+      accountValue: state?.marginSummary?.accountValue,
+      withdrawable: state?.withdrawable,
+      totalMarginUsed: state?.marginSummary?.totalMarginUsed,
+      totalNtlPos: state?.marginSummary?.totalNtlPos,
+    });
+
     return {
       balance: state?.marginSummary?.accountValue || "0",
       available: state?.withdrawable || "0",
