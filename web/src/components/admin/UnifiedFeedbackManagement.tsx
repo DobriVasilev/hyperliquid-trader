@@ -69,10 +69,25 @@ const CORRECTION_TYPE_LABELS: Record<string, { label: string; icon: any; color: 
   edit: { label: "Edited", icon: Edit3, color: "text-yellow-400" },
 };
 
+interface IndicatorReasoning {
+  id: string;
+  indicatorType: string;
+  title: string;
+  description: string;
+  status: string;
+  votes: number;
+  createdAt: string;
+  user: {
+    name: string | null;
+    email: string;
+  };
+}
+
 export function UnifiedFeedbackManagement() {
-  const [activeTab, setActiveTab] = useState<"sessions" | "bugs">("sessions");
+  const [activeTab, setActiveTab] = useState<"sessions" | "bugs" | "indicators">("sessions");
   const [bugFeedback, setBugFeedback] = useState<BugFeedback[]>([]);
   const [sessionGroups, setSessionGroups] = useState<SessionGroup[]>([]);
+  const [indicatorReasoning, setIndicatorReasoning] = useState<IndicatorReasoning[]>([]);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -85,14 +100,16 @@ export function UnifiedFeedbackManagement() {
 
   async function fetchAllFeedback() {
     try {
-      // Fetch both types in parallel
-      const [bugRes, correctionRes] = await Promise.all([
+      // Fetch all three types in parallel
+      const [bugRes, correctionRes, reasoningRes] = await Promise.all([
         fetch("/api/feedback"),
         fetch("/api/admin/pattern-corrections"),
+        fetch("/api/indicators/reasoning"),
       ]);
 
       const bugData = await bugRes.json();
       const correctionData = await correctionRes.json();
+      const reasoningData = await reasoningRes.json();
 
       if (bugData.success) {
         setBugFeedback(bugData.data.feedback || []);
@@ -102,6 +119,10 @@ export function UnifiedFeedbackManagement() {
         // Group corrections by session
         const grouped = groupCorrectionsBySession(correctionData.data || []);
         setSessionGroups(grouped);
+      }
+
+      if (reasoningData.success) {
+        setIndicatorReasoning(reasoningData.data.reasoning || []);
       }
     } catch (err) {
       setError("Failed to load feedback");
@@ -214,6 +235,16 @@ export function UnifiedFeedbackManagement() {
             }`}
           >
             Bug/Feature Reports ({bugFeedback.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("indicators")}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === "indicators"
+                ? "text-blue-400 border-b-2 border-blue-400"
+                : "text-gray-400 hover:text-gray-300"
+            }`}
+          >
+            Indicator Reasoning ({indicatorReasoning.length})
           </button>
         </div>
 
@@ -389,6 +420,111 @@ export function UnifiedFeedbackManagement() {
             <p className="text-lg font-medium mb-2">No bug/feature reports yet</p>
             <p className="text-sm">User-submitted bugs and feature requests will appear here</p>
           </div>
+        )}
+
+        {activeTab === "indicators" && (
+          <>
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <Link
+                href="/indicators/submit"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Submit New Reasoning
+              </Link>
+            </div>
+
+            {/* Indicator Reasoning List */}
+            {indicatorReasoning.length === 0 ? (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 text-center text-gray-500">
+                <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                <p className="text-lg font-medium mb-2">No indicator reasoning submitted yet</p>
+                <p className="text-sm mb-4">Share your pattern recognition logic to help improve the algorithms</p>
+                <Link
+                  href="/indicators/submit"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  Submit Reasoning
+                </Link>
+              </div>
+            ) : (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-800 border-b border-gray-700">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Indicator
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Title
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          User
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Votes
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Created
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {indicatorReasoning.map((reasoning) => (
+                        <tr key={reasoning.id} className="hover:bg-gray-800/50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-medium rounded bg-purple-600/20 text-purple-400">
+                              {reasoning.indicatorType.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-white">{reasoning.title}</div>
+                            <div className="text-sm text-gray-400 line-clamp-1 mt-1">
+                              {reasoning.description}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-white">{reasoning.user.name || "Unknown"}</div>
+                            <div className="text-xs text-gray-500">{reasoning.user.email}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-1 text-xs font-medium rounded ${
+                                reasoning.status === "PENDING"
+                                  ? "bg-yellow-600/20 text-yellow-400"
+                                  : reasoning.status === "APPROVED"
+                                  ? "bg-green-600/20 text-green-400"
+                                  : reasoning.status === "IMPLEMENTED"
+                                  ? "bg-blue-600/20 text-blue-400"
+                                  : "bg-gray-600/20 text-gray-400"
+                              }`}
+                            >
+                              {reasoning.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-1 text-gray-400">
+                              <CheckCircle className="w-4 h-4" />
+                              <span className="text-sm">{reasoning.votes}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                            {new Date(reasoning.createdAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

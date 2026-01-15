@@ -90,6 +90,10 @@ model User {
   feedbackImplemented    Feedback[]        @relation("ImplementedFeedback")
   feedbackComments       FeedbackComment[] @relation("FeedbackComments")
 
+  // Indicator Reasoning System
+  indicatorReasoningSubmissions IndicatorReasoning[] @relation("IndicatorReasoningSubmissions")
+  indicatorReasoningImplemented IndicatorReasoning[] @relation("ImplementedIndicatorReasoning")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -1243,4 +1247,90 @@ model FeedbackComment {
 
   @@index([feedbackId, createdAt])
   @@index([userId])
+}
+
+// ============================================================================
+// INDICATOR REASONING SYSTEM
+// For users to submit their reasoning on how to identify new patterns
+// ============================================================================
+
+enum IndicatorType {
+  CHANGE_OF_CHARACTER  // CHoCH
+  TRADING_RANGE
+  FALSE_BREAKOUT
+  LIQUIDITY_SWEEP
+  STOP_HUNT
+  FAIR_VALUE_GAP      // FVG
+  PREMIUM_DISCOUNT    // Premium/Discount zones
+  INDUCEMENT
+  MARKET_STRUCTURE    // General MS concepts
+  OTHER
+}
+
+enum ReasoningStatus {
+  PENDING      // Awaiting review
+  UNDER_REVIEW // Being evaluated
+  APPROVED     // Good reasoning, will implement
+  IMPLEMENTED  // Algorithm created
+  REJECTED     // Not actionable
+}
+
+model IndicatorReasoning {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Ownership
+  userId        String
+  user          User     @relation("IndicatorReasoningSubmissions", fields: [userId], references: [id], onDelete: Cascade)
+
+  // What indicator
+  indicatorType IndicatorType
+  customName    String?  // If indicatorType === OTHER
+
+  // Submission content
+  title         String
+  description   String   @db.Text
+
+  // Supporting materials (URLs from R2)
+  screenshots   Json?    // [{id, url, caption, width, height}]
+  videos        Json?    // [{id, url, caption, duration}]
+  voiceNotes    Json?    // [{id, url, duration, transcription}]
+
+  // Optional context
+  symbol        String?  // "BTC", "ETH" - which chart they're referencing
+  timeframe     String?  // "5m", "1h", "4h"
+  candleData    Json?    // Optional: {startTime, endTime, candleRange}
+
+  // Algorithm ideas (optional, in plain English)
+  algorithmIdea String?  @db.Text
+  pseudocode    String?  @db.Text
+
+  // Community engagement
+  votes         Int      @default(0)
+  viewCount     Int      @default(0)
+
+  // Status tracking
+  status        ReasoningStatus @default(PENDING)
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewNotes   String?  @db.Text
+
+  // Implementation tracking (same as Feedback)
+  implementationStatus ImplementationStatus @default(PENDING)
+  implementedAt        DateTime?
+  implementedById      String?
+  implementedBy        User?   @relation("ImplementedIndicatorReasoning", fields: [implementedById], references: [id])
+
+  // Claude Code processing
+  claudeSessionId      String?
+  implementationLog    Json?
+  processedAt          DateTime?
+  errorMessage         String?  @db.Text
+  retryCount           Int      @default(0)
+
+  @@index([userId, createdAt])
+  @@index([indicatorType, status])
+  @@index([implementationStatus])
+  @@index([votes])
 }
