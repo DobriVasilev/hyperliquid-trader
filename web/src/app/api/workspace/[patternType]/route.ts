@@ -181,7 +181,7 @@ export async function POST(
           userReasoning,
           identificationSteps: identificationSteps
             ? JSON.stringify(identificationSteps)
-            : null,
+            : undefined,
           attachments: attachments || [],
           createdById: session.user.id,
         },
