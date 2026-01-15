@@ -221,7 +221,10 @@ async function monitorDeployments() {
       where: {
         status: "completed",
         commitHash: { not: null },
-        deployStatus: { in: [null, "building"] },
+        OR: [
+          { deployStatus: null },
+          { deployStatus: "building" },
+        ],
       },
       include: {
         workspace: true,
