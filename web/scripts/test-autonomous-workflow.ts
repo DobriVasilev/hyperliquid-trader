@@ -15,6 +15,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { ulid } from "ulid";
 
 const prisma = new PrismaClient();
 
@@ -86,20 +87,28 @@ async function createTestWorkspace() {
 
   // Create test session with corrections
   console.log("\n📊 Creating test session with corrections...");
+
+  // Generate ULIDs for session and corrections
+  const sessionId = ulid();
+  const correction1Id = ulid();
+  const correction2Id = ulid();
+
   const session = await prisma.patternSession.create({
     data: {
+      id: sessionId,
+      name: "Test Autonomous Workflow Session",
       workspaceId: workspace.id,
       patternType: "TEST_AUTO",
       symbol: "BTCUSDT",
       timeframe: "1h",
-      chartType: "candlestick",
-      startDate: new Date("2024-01-01"),
-      endDate: new Date("2024-01-31"),
+      startTime: new Date("2024-01-01"),
+      endTime: new Date("2024-01-31"),
       status: "submitted_for_review",
       createdById: user.id,
       corrections: {
         create: [
           {
+            id: correction1Id,
             correctionType: "missing_detection",
             reason: "Pattern should have been detected at this candle but was missed",
             originalTime: new Date("2024-01-15T10:00:00Z"),
@@ -107,16 +116,17 @@ async function createTestWorkspace() {
             correctedTime: new Date("2024-01-15T10:00:00Z"),
             correctedPrice: 42500.00,
             correctedType: "bullish",
-            createdById: user.id,
+            userId: user.id,
           },
           {
+            id: correction2Id,
             correctionType: "false_positive",
             reason: "This detection is incorrect - no valid pattern exists here",
             originalTime: new Date("2024-01-20T14:30:00Z"),
             originalPrice: 43200.00,
             correctedTime: new Date("2024-01-20T14:30:00Z"),
             correctedPrice: 43200.00,
-            createdById: user.id,
+            userId: user.id,
           },
         ],
       },
