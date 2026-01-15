@@ -53,7 +53,9 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
+     * - /api/* (API routes handle their own auth)
+     * - /webhook/* (webhooks handle their own auth)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/|webhook/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
