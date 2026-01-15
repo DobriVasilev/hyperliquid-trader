@@ -25,46 +25,53 @@ model User {
   // Role: admin, moderator, member, dev_team
   // dev_team = autonomous Claude Code workflow
   // others = manual prompt export workflow
-  role          String    @default("member")
+  role String @default("member")
 
   // Bio for profile
-  bio           String?   @db.Text
-  username      String?   @unique // @username for mentions
+  bio      String? @db.Text
+  username String? @unique // @username for mentions
 
   // Security PIN (6-digit, bcrypt hashed)
-  securityPin       String?   // bcrypt hashed PIN
-  pinAttempts       Int       @default(0) // Failed attempts counter
-  pinLockedUntil    DateTime? // Lockout expiry
-  pinSetAt          DateTime? // When PIN was set
+  securityPin    String? // bcrypt hashed PIN
+  pinAttempts    Int       @default(0) // Failed attempts counter
+  pinLockedUntil DateTime? // Lockout expiry
+  pinSetAt       DateTime? // When PIN was set
 
   // User preferences (stored as JSON)
   // {defaultSymbol, defaultTimeframe, swingDetectionMode, emailNotifications, collaborationAlerts}
-  preferences   Json?
+  preferences Json?
 
   // Relations
-  accounts      Account[]
-  sessions      Session[]
+  accounts Account[]
+  sessions Session[]
 
   // Pattern Tool relations
-  createdSessions  PatternSession[]   @relation("SessionCreator")
-  implementedSessions PatternSession[] @relation("ImplementedSessions")
-  sharedSessions   SessionShare[]
-  corrections      PatternCorrection[]
-  comments         PatternComment[]
-  events           PatternEvent[]
-  patternVotes     PatternVote[]
-  patternMentions  PatternCommentMention[]
+  createdSessions     PatternSession[]        @relation("SessionCreator")
+  implementedSessions PatternSession[]        @relation("ImplementedSessions")
+  sharedSessions      SessionShare[]
+  corrections         PatternCorrection[]
+  comments            PatternComment[]
+  events              PatternEvent[]
+  patternVotes        PatternVote[]
+  patternMentions     PatternCommentMention[]
 
   // Implementation Session relations
-  createdImplementationSessions    ImplementationSession[] @relation("CreatedImplementationSessions")
+  createdImplementationSessions     ImplementationSession[] @relation("CreatedImplementationSessions")
   implementedImplementationSessions ImplementationSession[] @relation("ImplementedImplementationSessions")
 
+  // Pattern Workspace relations
+  createdWorkspaces  PatternWorkspace[] @relation("CreatedWorkspaces")
+  approvedWorkspaces PatternWorkspace[] @relation("ApprovedWorkspaces")
+  verifiedWorkspaces PatternWorkspace[] @relation("VerifiedWorkspaces")
+  workspaceMessages  WorkspaceMessage[]
+  claudeExecutions   ClaudeExecution[]
+
   // Chat relations
-  chatMessages       ChatMessage[]        @relation("ChatMessages")
+  chatMessages       ChatMessage[]       @relation("ChatMessages")
   chatPresence       ChatPresence?
-  sentMessages       DirectMessage[]      @relation("SentMessages")
-  receivedMessages   DirectMessage[]      @relation("ReceivedMessages")
-  createdChannels    ChatChannel[]        @relation("ChannelCreator")
+  sentMessages       DirectMessage[]     @relation("SentMessages")
+  receivedMessages   DirectMessage[]     @relation("ReceivedMessages")
+  createdChannels    ChatChannel[]       @relation("ChannelCreator")
   channelMemberships ChatChannelMember[]
   messageReactions   MessageReaction[]
   messageMentions    MessageMention[]
@@ -74,8 +81,8 @@ model User {
   chatAttachments    ChatAttachment[]
 
   // E2E Encryption
-  keyBundle          UserKeyBundle?
-  encryptedSessions  EncryptedSession[]
+  keyBundle         UserKeyBundle?
+  encryptedSessions EncryptedSession[]
 
   // Friend/Contact System
   sentFriendRequests     FriendRequest[] @relation("SentRequests")
@@ -84,15 +91,15 @@ model User {
   friendsAsUser2         Friendship[]    @relation("FriendUser2")
 
   // Trading System
-  wallets                UserWallet[]
-  botConfigs             BotConfig[]
-  trades                 Trade[]
-  extensionKeys          ExtensionKey[]
+  wallets       UserWallet[]
+  botConfigs    BotConfig[]
+  trades        Trade[]
+  extensionKeys ExtensionKey[]
 
   // Feedback System
-  feedbackSubmitted      Feedback[]        @relation("UserFeedback")
-  feedbackImplemented    Feedback[]        @relation("ImplementedFeedback")
-  feedbackComments       FeedbackComment[] @relation("FeedbackComments")
+  feedbackSubmitted   Feedback[]        @relation("UserFeedback")
+  feedbackImplemented Feedback[]        @relation("ImplementedFeedback")
+  feedbackComments    FeedbackComment[] @relation("FeedbackComments")
 
   // Indicator Reasoning System
   indicatorReasoningSubmissions IndicatorReasoning[] @relation("IndicatorReasoningSubmissions")
@@ -139,19 +146,19 @@ model VerificationToken {
 
 // Security verification codes (for email verification on sensitive actions)
 model SecurityCode {
-  id          String   @id @default(cuid())
-  userId      String
-  code        String   // 6-digit code (hashed)
-  action      String   // "withdraw", "emergency_withdraw", etc.
+  id     String @id @default(cuid())
+  userId String
+  code   String // 6-digit code (hashed)
+  action String // "withdraw", "emergency_withdraw", etc.
 
   // Rate limiting
-  attempts    Int      @default(0) // Failed verification attempts
+  attempts Int @default(0) // Failed verification attempts
 
   // Expiry
-  expiresAt   DateTime
-  usedAt      DateTime?
+  expiresAt DateTime
+  usedAt    DateTime?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, action])
   @@index([expiresAt])
@@ -162,72 +169,78 @@ model SecurityCode {
 // ============================================================================
 
 model PatternSession {
-  id             String   @id // ULID
+  id String @id // ULID
 
   // Display name
-  name           String   // User-friendly session name
+  name String // User-friendly session name
 
   // What we're reviewing
-  symbol         String   // "BTC", "ETH"
-  timeframe      String   // "1m", "5m", "15m", "1h", "4h", "1d"
-  startTime      DateTime? // Optional: will be computed from candle data
-  endTime        DateTime? // Optional: will be computed from candle data
-  patternType    String   // "swings", "bos", "msb", "range", "false_breakout"
-  patternVersion String   @default("1.0.0") // Algorithm version that generated detections
-  patternSettings Json?   // Pattern-specific settings (e.g., { detection_mode: "wicks" | "closes" })
+  symbol          String // "BTC", "ETH"
+  timeframe       String // "1m", "5m", "15m", "1h", "4h", "1d"
+  startTime       DateTime? // Optional: will be computed from candle data
+  endTime         DateTime? // Optional: will be computed from candle data
+  patternType     String // "swings", "bos", "msb", "range", "false_breakout"
+  patternVersion  String    @default("1.0.0") // Algorithm version that generated detections
+  patternSettings Json? // Pattern-specific settings (e.g., { detection_mode: "wicks" | "closes" })
+
+  // Workspace relation
+  workspaceId String?
+  workspace   PatternWorkspace? @relation("WorkspaceSessions", fields: [workspaceId], references: [id])
 
   // Candle data snapshot (stored to ensure consistency)
-  candleData     Json?    // Array of OHLCV candles
+  candleData Json? // Array of OHLCV candles
 
   // Ownership
-  createdById    String
-  createdBy      User     @relation("SessionCreator", fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation("SessionCreator", fields: [createdById], references: [id])
 
   // Collaboration
-  isPublic       Boolean  @default(false)
-  shares         SessionShare[]
+  isPublic Boolean        @default(false)
+  shares   SessionShare[]
 
   // Status
-  status         String   @default("active") // active, completed, archived, submitted_for_review, implemented
+  status String @default("active") // active, completed, archived, submitted_for_review, implemented
 
   // Metadata
-  description    String?  @db.Text
+  description String? @db.Text
 
   // Feedback System
-  feedbackType   String?  // "how-i-do-it" (pre-release explanation) or "algorithm-correction" (released indicator feedback)
+  feedbackType         String? // "how-i-do-it" (pre-release explanation) or "algorithm-correction" (released indicator feedback)
   submittedForReviewAt DateTime?
-  implementedAt  DateTime?
-  implementedBy  String?
-  implementedByUser User? @relation("ImplementedSessions", fields: [implementedBy], references: [id])
+  implementedAt        DateTime?
+  implementedBy        String?
+  implementedByUser    User?     @relation("ImplementedSessions", fields: [implementedBy], references: [id])
 
   // Timestamps
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  detections     PatternDetection[]
-  corrections    PatternCorrection[]
-  comments       PatternComment[]
-  events         PatternEvent[]
+  detections        PatternDetection[]
+  corrections       PatternCorrection[]
+  comments          PatternComment[]
+  events            PatternEvent[]
+  workspaceMessages WorkspaceMessage[]
 
   @@index([createdById, status])
   @@index([patternType, status])
   @@index([createdAt])
   @@index([status, submittedForReviewAt])
+  @@index([workspaceId])
 }
 
 model SessionShare {
-  id         String   @id @default(cuid())
-  sessionId  String
-  userId     String
+  id        String @id @default(cuid())
+  sessionId String
+  userId    String
 
   // Permissions: view, comment, edit, admin
-  permission String   @default("view")
+  permission String @default("view")
 
-  session    PatternSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session PatternSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([sessionId, userId])
 }
@@ -237,57 +250,57 @@ model SessionShare {
 // ============================================================================
 
 model ImplementationSession {
-  id            String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // What's being implemented
-  sessionId     String?  // If implementing pattern corrections
-  indicatorId   String?  // If implementing indicator reasoning
-  feedbackIds   String[] // Related feedback items (for aggregated implementations)
+  sessionId   String? // If implementing pattern corrections
+  indicatorId String? // If implementing indicator reasoning
+  feedbackIds String[] // Related feedback items (for aggregated implementations)
 
   // Implementation metadata
-  title         String   // "Implement MSB corrections from session X"
-  description   String?  @db.Text
-  type          String   // "pattern_correction" | "indicator_implementation" | "bug_fix" | "feature"
+  title       String // "Implement MSB corrections from session X"
+  description String? @db.Text
+  type        String // "pattern_correction" | "indicator_implementation" | "bug_fix" | "feature"
 
   // Progress tracking
-  phase         String   @default("planning") // planning | implementing | testing | refining | completed | failed
-  status        String   @default("active")   // active | paused | completed | failed | cancelled
-  progress      Int      @default(0)          // 0-100 percentage
+  phase    String @default("planning") // planning | implementing | testing | refining | completed | failed
+  status   String @default("active") // active | paused | completed | failed | cancelled
+  progress Int    @default(0) // 0-100 percentage
 
   // Phase breakdown with timestamps
-  phases        Json?    // { planning: {startedAt, completedAt, checkpoints: []}, implementing: {...}, etc. }
+  phases Json? // { planning: {startedAt, completedAt, checkpoints: []}, implementing: {...}, etc. }
 
   // Checkpoints (for collapsible sections)
-  checkpoints   Json?    // Array of {id, phase, title, status, startedAt, completedAt, details, tools[]}
+  checkpoints Json? // Array of {id, phase, title, status, startedAt, completedAt, details, tools[]}
 
   // Live updates
-  currentTask   String?  // "Reading pattern detection files..."
-  log           Json?    // Array of log entries [{timestamp, message, level}]
+  currentTask String? // "Reading pattern detection files..."
+  log         Json? // Array of log entries [{timestamp, message, level}]
 
   // Results
-  filesChanged  String[] // Array of file paths that were modified
-  commitHash    String?  // Git commit hash after implementation
+  filesChanged   String[] // Array of file paths that were modified
+  commitHash     String? // Git commit hash after implementation
   pullRequestUrl String? // GitHub PR URL if created
-  deploymentUrl String?  // Deployment URL after push
+  deploymentUrl  String? // Deployment URL after push
 
   // Error handling
-  errors        Json?    // Array of errors encountered
-  retryCount    Int      @default(0)
-  maxRetries    Int      @default(3)
+  errors     Json? // Array of errors encountered
+  retryCount Int   @default(0)
+  maxRetries Int   @default(3)
 
   // Timing
-  estimatedDuration Int?     // Estimated time in minutes
-  actualDuration    Int?     // Actual time taken in minutes
+  estimatedDuration Int? // Estimated time in minutes
+  actualDuration    Int? // Actual time taken in minutes
   startedAt         DateTime?
   completedAt       DateTime?
 
   // Created by (can be system for autonomous)
-  createdById   String
-  createdBy     User     @relation("CreatedImplementationSessions", fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation("CreatedImplementationSessions", fields: [createdById], references: [id])
 
   // Implemented by Claude Code (user account)
   implementedById String?
-  implementedBy   User?  @relation("ImplementedImplementationSessions", fields: [implementedById], references: [id])
+  implementedBy   User?   @relation("ImplementedImplementationSessions", fields: [implementedById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -299,40 +312,203 @@ model ImplementationSession {
 }
 
 // ============================================================================
+// PATTERN WORKSPACE - Claude.ai-style unified workspace for each pattern
+// ============================================================================
+
+model PatternWorkspace {
+  id String @id @default(cuid())
+
+  // Pattern identification
+  patternType String // "swings", "bos", "choch", etc. (matches PatternSession.patternType)
+  name        String // Display name "Swing Detection"
+  category    String // "price_action", "order_blocks", "fibonacci", etc.
+
+  // Status tracking
+  status  String @default("soon") // soon | implementing | beta | in_review | verified
+  version String @default("0.0.0") // Semantic version
+
+  // Lifecycle timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Status transition timestamps
+  implementedAt DateTime? // When first algorithm was created (SOON → BETA)
+  approvedAt    DateTime? // When user approved (BETA → IN_REVIEW)
+  verifiedAt    DateTime? // When admin verified (IN_REVIEW → VERIFIED)
+
+  // Pattern description (for SOON patterns)
+  description         String?  @db.Text
+  userReasoning       String?  @db.Text
+  identificationSteps Json? // Array of steps: [{step: "Look for...", detail: "..."}]
+  attachments         String[] // URLs to images/videos submitted by user
+
+  // Statistics (denormalized for performance)
+  sessionCount  Int       @default(0)
+  feedbackCount Int       @default(0)
+  successRate   Float? // % of detections validated
+  lastTestedAt  DateTime?
+
+  // Relations
+  createdById String
+  createdBy   User   @relation("CreatedWorkspaces", fields: [createdById], references: [id])
+
+  approvedById String?
+  approvedBy   User?   @relation("ApprovedWorkspaces", fields: [approvedById], references: [id])
+
+  verifiedById String?
+  verifiedBy   User?   @relation("VerifiedWorkspaces", fields: [verifiedById], references: [id])
+
+  // Child relations
+  messages   WorkspaceMessage[]
+  sessions   PatternSession[]   @relation("WorkspaceSessions")
+  executions ClaudeExecution[]
+
+  @@unique([patternType]) // One workspace per pattern type
+  @@index([patternType])
+  @@index([status])
+  @@index([createdById])
+}
+
+// ============================================================================
+// WORKSPACE MESSAGE - Timeline entries (chat-style messages)
+// ============================================================================
+
+model WorkspaceMessage {
+  id String @id @default(cuid())
+
+  workspaceId String
+  workspace   PatternWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Message metadata
+  type      String // See MESSAGE_TYPES in docs
+  createdAt DateTime @default(now())
+
+  // Author
+  authorId   String?
+  author     User?   @relation(fields: [authorId], references: [id])
+  authorType String  @default("user") // user | system | claude
+
+  // Content
+  title   String?
+  content String? @db.Text
+  data    Json? // Type-specific data
+
+  // Attachments
+  attachments String[] // URLs to images, videos, files
+
+  // References to other entities
+  sessionId String?
+  session   PatternSession? @relation(fields: [sessionId], references: [id])
+
+  executionId String?
+  execution   ClaudeExecution? @relation(fields: [executionId], references: [id])
+
+  // Status for progress messages
+  status   String? // pending | in_progress | completed | failed
+  progress Int? // 0-100
+
+  @@index([workspaceId, createdAt])
+  @@index([type])
+  @@index([sessionId])
+  @@index([executionId])
+}
+
+// ============================================================================
+// CLAUDE EXECUTION - Tracks each time Claude processes feedback
+// ============================================================================
+
+model ClaudeExecution {
+  id String @id @default(cuid())
+
+  workspaceId String
+  workspace   PatternWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Trigger
+  triggeredBy String
+  user        User     @relation(fields: [triggeredBy], references: [id])
+  triggeredAt DateTime @default(now())
+
+  // Status
+  status   String  @default("pending") // pending | running | completed | failed | retry
+  phase    String? // planning | implementing | testing | refining | deploying
+  progress Int     @default(0) // 0-100
+
+  // Input - what feedback triggered this
+  sessionIds   String[] // Sessions being processed
+  feedbackType String? // Type of feedback (pattern_correction, bug_fix, etc.)
+  promptFile   String? // Path to generated prompt file
+
+  // Output
+  completedAt   DateTime?
+  filesChanged  String[] // List of files Claude modified
+  commitHash    String?
+  commitMessage String?   @db.Text
+
+  // Deploy tracking
+  deployStartedAt   DateTime?
+  deployCompletedAt DateTime?
+  deployUrl         String?
+  deployStatus      String? // queued | building | ready | error | canceled
+  deployLogs        String?   @db.Text
+
+  // Retry logic
+  retryCount        Int     @default(0)
+  maxRetries        Int     @default(10)
+  retryReason       String? @db.Text
+  parentExecutionId String?
+
+  // Phases breakdown (JSON)
+  phases      Json? // { planning: { startedAt, completedAt, checkpoints: [] }, ... }
+  checkpoints Json? // Array of checkpoint objects
+
+  // Error handling
+  error     String?   @db.Text
+  erroredAt DateTime?
+
+  // Relations
+  messages WorkspaceMessage[]
+
+  @@index([workspaceId, triggeredAt])
+  @@index([status])
+  @@index([phase])
+  @@index([deployStatus])
+}
+
+// ============================================================================
 // PATTERN DETECTION
 // ============================================================================
 
 model PatternDetection {
-  id            String   @id // ULID
-  sessionId     String
+  id        String @id // ULID
+  sessionId String
 
   // Position on chart
-  candleIndex   Int
-  candleTime    DateTime
-  price         Float
+  candleIndex Int
+  candleTime  DateTime
+  price       Float
 
   // What was detected
-  detectionType String   // "swing_high", "swing_low", "bos_bullish", "bos_bearish", etc.
-  structure     String?  // "HH", "HL", "LH", "LL" for swings
+  detectionType String // "swing_high", "swing_low", "bos_bullish", "bos_bearish", etc.
+  structure     String? // "HH", "HL", "LH", "LL" for swings
 
   // Algorithm metadata
-  confidence    Float?   // If algorithm provides confidence score
-  metadata      Json?    // Algorithm-specific data
+  confidence Float? // If algorithm provides confidence score
+  metadata   Json? // Algorithm-specific data
 
   // Visual position (for canvas rendering)
-  canvasX       Float?
-  canvasY       Float?
+  canvasX Float?
+  canvasY Float?
 
   // Status
-  status        String   @default("pending") // pending, confirmed, rejected, moved
+  status String @default("pending") // pending, confirmed, rejected, moved
 
   // Timestamps
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   // Relations
-  session       PatternSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  corrections   PatternCorrection[]
-  comments      PatternComment[]
+  session     PatternSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  corrections PatternCorrection[]
+  comments    PatternComment[]
 
   @@index([sessionId, detectionType])
   @@index([sessionId, status])
@@ -344,56 +520,56 @@ model PatternDetection {
 // ============================================================================
 
 model PatternCorrection {
-  id            String   @id // ULID
-  sessionId     String
-  detectionId   String?  // Null if adding new detection
-  userId        String
+  id          String  @id // ULID
+  sessionId   String
+  detectionId String? // Null if adding new detection
+  userId      String
 
   // What kind of correction
-  correctionType String  // "move", "delete", "add", "confirm"
+  correctionType String // "move", "delete", "add", "confirm"
 
   // Original state (for moves)
-  originalIndex  Int?
-  originalTime   DateTime?
-  originalPrice  Float?
-  originalType   String?
+  originalIndex Int?
+  originalTime  DateTime?
+  originalPrice Float?
+  originalType  String?
 
   // Corrected state (for moves/adds)
-  correctedIndex Int?
-  correctedTime  DateTime?
-  correctedPrice Float?
-  correctedType  String?  // If changing detection type
+  correctedIndex     Int?
+  correctedTime      DateTime?
+  correctedPrice     Float?
+  correctedType      String? // If changing detection type
   correctedStructure String? // If changing structure (HH/HL/LH/LL)
 
   // Why
-  reason        String   @db.Text
+  reason String @db.Text
 
   // Attachments
-  attachments   Json?    // [{id, url, type, name, size}]
+  attachments Json? // [{id, url, type, name, size}]
 
   // Metadata (stores original status for undo, etc.)
-  metadata      Json?
+  metadata Json?
 
   // Voting (denormalized for performance)
-  upvotes       Int      @default(0)
-  downvotes     Int      @default(0)
-  score         Int      @default(0)  // upvotes - downvotes
+  upvotes   Int @default(0)
+  downvotes Int @default(0)
+  score     Int @default(0) // upvotes - downvotes
 
   // Status
-  status        String   @default("pending") // pending, applied, disputed
-  resolvedAt    DateTime?
-  resolvedById  String?
+  status       String    @default("pending") // pending, applied, disputed
+  resolvedAt   DateTime?
+  resolvedById String?
 
   // Timestamps
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  session       PatternSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  detection     PatternDetection?  @relation(fields: [detectionId], references: [id], onDelete: SetNull)
-  user          User               @relation(fields: [userId], references: [id])
-  comments      PatternComment[]   @relation("CorrectionComments")
-  votes         PatternVote[]
+  session   PatternSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  detection PatternDetection? @relation(fields: [detectionId], references: [id], onDelete: SetNull)
+  user      User              @relation(fields: [userId], references: [id])
+  comments  PatternComment[]  @relation("CorrectionComments")
+  votes     PatternVote[]
 
   @@index([sessionId, status])
   @@index([userId])
@@ -407,57 +583,57 @@ model PatternCorrection {
 // ============================================================================
 
 model PatternComment {
-  id            String   @id // ULID
-  sessionId     String
-  userId        String
+  id        String @id // ULID
+  sessionId String
+  userId    String
 
   // What it's attached to (one of these)
-  detectionId   String?
-  correctionId  String?
-  parentId      String?  // For threaded replies
+  detectionId  String?
+  correctionId String?
+  parentId     String? // For threaded replies
 
   // Content
-  content       String   @db.Text
-  attachments   Json?    // [{id, url, type, name, size}]
+  content     String @db.Text
+  attachments Json? // [{id, url, type, name, size}]
 
   // Position on canvas (for positional comments)
-  canvasX       Float?
-  canvasY       Float?
-  candleTime    DateTime?
+  canvasX    Float?
+  canvasY    Float?
+  candleTime DateTime?
 
   // Threading metadata
-  depth         Int      @default(0)  // Nesting level (0 = top level)
-  path          String?  // Materialized path: "rootId/parentId/thisId" for efficient tree queries
+  depth Int     @default(0) // Nesting level (0 = top level)
+  path  String? // Materialized path: "rootId/parentId/thisId" for efficient tree queries
 
   // Voting (denormalized for performance)
-  upvotes       Int      @default(0)
-  downvotes     Int      @default(0)
-  score         Int      @default(0)  // upvotes - downvotes
+  upvotes   Int @default(0)
+  downvotes Int @default(0)
+  score     Int @default(0) // upvotes - downvotes
 
   // Status
-  resolved      Boolean  @default(false)
-  resolvedAt    DateTime?
-  resolvedById  String?
-  isCollapsed   Boolean  @default(false)  // User collapsed this thread
+  resolved     Boolean   @default(false)
+  resolvedAt   DateTime?
+  resolvedById String?
+  isCollapsed  Boolean   @default(false) // User collapsed this thread
 
   // Edit tracking
-  editedAt      DateTime?
-  editCount     Int      @default(0)
-  originalContent String? @db.Text // Store original if edited
+  editedAt        DateTime?
+  editCount       Int       @default(0)
+  originalContent String?   @db.Text // Store original if edited
 
   // Timestamps
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  session       PatternSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user          User               @relation(fields: [userId], references: [id])
-  detection     PatternDetection?  @relation(fields: [detectionId], references: [id], onDelete: SetNull)
-  correction    PatternCorrection? @relation("CorrectionComments", fields: [correctionId], references: [id], onDelete: SetNull)
-  parent        PatternComment?    @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies       PatternComment[]   @relation("CommentReplies")
-  votes         PatternVote[]
-  mentions      PatternCommentMention[]
+  session    PatternSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User                    @relation(fields: [userId], references: [id])
+  detection  PatternDetection?       @relation(fields: [detectionId], references: [id], onDelete: SetNull)
+  correction PatternCorrection?      @relation("CorrectionComments", fields: [correctionId], references: [id], onDelete: SetNull)
+  parent     PatternComment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies    PatternComment[]        @relation("CommentReplies")
+  votes      PatternVote[]
+  mentions   PatternCommentMention[]
 
   @@index([sessionId])
   @@index([detectionId])
@@ -474,23 +650,23 @@ model PatternComment {
 // ============================================================================
 
 model PatternVote {
-  id            String   @id @default(cuid())
-  userId        String
+  id     String @id @default(cuid())
+  userId String
 
   // Polymorphic: vote on either comment or correction (one must be set)
-  commentId     String?
-  correctionId  String?
+  commentId    String?
+  correctionId String?
 
   // Vote value: 1 = upvote, -1 = downvote
-  value         Int      // 1 or -1
+  value Int // 1 or -1
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  comment       PatternComment?    @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  correction    PatternCorrection? @relation(fields: [correctionId], references: [id], onDelete: Cascade)
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment    PatternComment?    @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  correction PatternCorrection? @relation(fields: [correctionId], references: [id], onDelete: Cascade)
 
   // Each user can only vote once per item
   @@unique([userId, commentId])
@@ -504,19 +680,19 @@ model PatternVote {
 // ============================================================================
 
 model PatternCommentMention {
-  id            String   @id @default(cuid())
-  commentId     String
-  userId        String   // User being mentioned
+  id        String @id @default(cuid())
+  commentId String
+  userId    String // User being mentioned
 
   // Notification tracking
-  notified      Boolean  @default(false)
-  notifiedAt    DateTime?
+  notified   Boolean   @default(false)
+  notifiedAt DateTime?
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   // Relations
-  comment       PatternComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment PatternComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([commentId, userId])
   @@index([userId, notified])
@@ -527,27 +703,27 @@ model PatternCommentMention {
 // ============================================================================
 
 model PatternEvent {
-  id            String   @id // ULID
-  sessionId     String
-  userId        String
+  id        String @id // ULID
+  sessionId String
+  userId    String
 
   // Event details
-  eventType     String   // "session_created", "detection_added", "correction_made", etc.
-  entityType    String?  // "session", "detection", "correction", "comment"
-  entityId      String?  // ULID of the entity
+  eventType  String // "session_created", "detection_added", "correction_made", etc.
+  entityType String? // "session", "detection", "correction", "comment"
+  entityId   String? // ULID of the entity
 
   // Full event payload
-  payload       Json     // {action, before, after, metadata}
+  payload Json // {action, before, after, metadata}
 
   // Optional: snapshot for replay
   canvasSnapshot Json?
 
   // Timestamp
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   // Relations
-  session       PatternSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user          User           @relation(fields: [userId], references: [id])
+  session PatternSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id])
 
   @@index([sessionId, createdAt])
   @@index([entityId])
@@ -561,27 +737,27 @@ model PatternEvent {
 
 // Chat Channels (Group Chats)
 model ChatChannel {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  type        String   @default("public") // public, private
-  icon        String?  // emoji or URL
+  type        String  @default("public") // public, private
+  icon        String? // emoji or URL
 
   // Created by
   createdById String
-  createdBy   User     @relation("ChannelCreator", fields: [createdById], references: [id])
+  createdBy   User   @relation("ChannelCreator", fields: [createdById], references: [id])
 
   // Settings
-  isDefault   Boolean  @default(false) // Default channels everyone can see
-  archived    Boolean  @default(false)
+  isDefault Boolean @default(false) // Default channels everyone can see
+  archived  Boolean @default(false)
 
   // Relations
   messages    ChatMessage[]
   members     ChatChannelMember[]
   attachments ChatAttachment[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type])
   @@index([createdAt])
@@ -589,20 +765,20 @@ model ChatChannel {
 
 // Channel Membership with Roles
 model ChatChannelMember {
-  id          String   @id @default(cuid())
-  channelId   String
-  userId      String
-  role        String   @default("member") // admin, moderator, member
+  id        String @id @default(cuid())
+  channelId String
+  userId    String
+  role      String @default("member") // admin, moderator, member
 
   // Notifications
-  muted       Boolean  @default(false)
-  lastReadAt  DateTime @default(now())
+  muted      Boolean  @default(false)
+  lastReadAt DateTime @default(now())
 
   // Relations
-  channel     ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  joinedAt    DateTime @default(now())
+  joinedAt DateTime @default(now())
 
   @@unique([channelId, userId])
   @@index([userId])
@@ -610,46 +786,46 @@ model ChatChannelMember {
 
 // Chat Messages (enhanced)
 model ChatMessage {
-  id          String   @id @default(cuid())
-  userId      String
-  channelId   String?  // null for global/public chat
-  content     String   @db.Text
+  id        String  @id @default(cuid())
+  userId    String
+  channelId String? // null for global/public chat
+  content   String  @db.Text
 
   // Denormalized for performance (avoid joins on every message)
-  userName    String
-  userAvatar  String?
-  isVip       Boolean  @default(false)
+  userName   String
+  userAvatar String?
+  isVip      Boolean @default(false)
 
   // Attachments (multiple files supported)
-  attachments Json?    // [{url, type, name, size}]
+  attachments Json? // [{url, type, name, size}]
 
   // Reply support
-  replyToId   String?
-  replyTo     ChatMessage?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies     ChatMessage[] @relation("MessageReplies")
+  replyToId String?
+  replyTo   ChatMessage?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ChatMessage[] @relation("MessageReplies")
 
   // Editing
-  edited      Boolean  @default(false)
-  editedAt    DateTime?
+  edited   Boolean   @default(false)
+  editedAt DateTime?
 
   // Pinned message
-  pinned      Boolean  @default(false)
-  pinnedById  String?
+  pinned     Boolean @default(false)
+  pinnedById String?
 
   // Soft delete
-  deleted     Boolean  @default(false)
-  deletedAt   DateTime?
+  deleted   Boolean   @default(false)
+  deletedAt DateTime?
 
   // Relations
-  user        User           @relation("ChatMessages", fields: [userId], references: [id], onDelete: Cascade)
-  channel     ChatChannel?   @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  reactions   MessageReaction[]
-  mentions    MessageMention[]
+  user         User              @relation("ChatMessages", fields: [userId], references: [id], onDelete: Cascade)
+  channel      ChatChannel?      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  reactions    MessageReaction[]
+  mentions     MessageMention[]
   readReceipts MessageRead[]
-  editHistory MessageEdit[]
+  editHistory  MessageEdit[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([channelId, createdAt])
   @@index([createdAt])
@@ -660,16 +836,16 @@ model ChatMessage {
 
 // Separate Reaction Table for Better Tracking
 model MessageReaction {
-  id          String   @id @default(cuid())
-  messageId   String
-  userId      String
-  emoji       String   // 👍, ❤️, 😂, 😮, 😢, 🔥, 🚀, 💯
+  id        String @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String // 👍, ❤️, 😂, 😮, 😢, 🔥, 🚀, 💯
 
   // Relations
-  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
@@ -678,15 +854,15 @@ model MessageReaction {
 
 // @Mentions for Notifications
 model MessageMention {
-  id          String   @id @default(cuid())
-  messageId   String
-  userId      String   // User being mentioned
+  id        String @id @default(cuid())
+  messageId String
+  userId    String // User being mentioned
 
   // Relations
-  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([messageId, userId])
   @@index([userId])
@@ -694,15 +870,15 @@ model MessageMention {
 
 // Message Read Receipts
 model MessageRead {
-  id          String   @id @default(cuid())
-  messageId   String
-  userId      String
+  id        String @id @default(cuid())
+  messageId String
+  userId    String
 
   // Relations
-  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  readAt      DateTime @default(now())
+  readAt DateTime @default(now())
 
   @@unique([messageId, userId])
   @@index([userId])
@@ -710,33 +886,33 @@ model MessageRead {
 
 // Message Edit History
 model MessageEdit {
-  id          String   @id @default(cuid())
-  messageId   String
+  id              String @id @default(cuid())
+  messageId       String
   previousContent String @db.Text
 
   // Relations
-  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  editedAt    DateTime @default(now())
+  editedAt DateTime @default(now())
 
   @@index([messageId])
 }
 
 // Typing Indicators
 model TypingIndicator {
-  id          String   @id @default(cuid())
-  userId      String
-  channelId   String?  // null for global chat, or DM recipientId
-  dmUserId    String?  // For DM typing - the recipient user ID
+  id        String  @id @default(cuid())
+  userId    String
+  channelId String? // null for global chat, or DM recipientId
+  dmUserId  String? // For DM typing - the recipient user ID
 
   // Denormalized
-  userName    String
-  userAvatar  String?
+  userName   String
+  userAvatar String?
 
   // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  startedAt   DateTime @default(now())
+  startedAt DateTime @default(now())
 
   @@unique([userId, channelId])
   @@index([channelId])
@@ -745,28 +921,28 @@ model TypingIndicator {
 
 // Notifications System
 model ChatNotification {
-  id          String   @id @default(cuid())
-  userId      String   // Recipient
-  type        String   // mention, reply, dm, channel_invite
+  id     String @id @default(cuid())
+  userId String // Recipient
+  type   String // mention, reply, dm, channel_invite
 
   // Related entities
-  messageId   String?
-  channelId   String?
-  senderId    String?  // Who triggered the notification
+  messageId String?
+  channelId String?
+  senderId  String? // Who triggered the notification
 
   // Content preview
-  title       String
-  body        String   @db.Text
-  link        String?  // URL to navigate to
+  title String
+  body  String  @db.Text
+  link  String? // URL to navigate to
 
   // Status
-  read        Boolean  @default(false)
-  readAt      DateTime?
+  read   Boolean   @default(false)
+  readAt DateTime?
 
   // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, read])
   @@index([createdAt])
@@ -774,24 +950,24 @@ model ChatNotification {
 
 // Chat Presence (enhanced)
 model ChatPresence {
-  id          String   @id @default(cuid())
-  userId      String   @unique
+  id     String @id @default(cuid())
+  userId String @unique
 
   // Denormalized for performance
-  userName    String
-  userAvatar  String?
-  isVip       Boolean  @default(false)
+  userName   String
+  userAvatar String?
+  isVip      Boolean @default(false)
 
   // Status: online, away, busy, offline
-  status      String   @default("online")
+  status       String  @default("online")
   customStatus String? // "In a meeting", "Out for lunch"
 
   // Activity tracking
-  lastSeen    DateTime @default(now())
-  lastActive  DateTime @default(now()) // Last message/reaction
+  lastSeen   DateTime @default(now())
+  lastActive DateTime @default(now()) // Last message/reaction
 
   // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([lastSeen])
@@ -799,39 +975,39 @@ model ChatPresence {
 
 // Direct Messages (enhanced)
 model DirectMessage {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Participants
-  senderId    String
-  receiverId  String
+  senderId   String
+  receiverId String
 
   // Content
-  content     String   @db.Text
-  attachments Json?    // [{url, type, name, size}]
+  content     String @db.Text
+  attachments Json? // [{url, type, name, size}]
 
   // Reply support
-  replyToId   String?
-  replyTo     DirectMessage?  @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies     DirectMessage[] @relation("DMReplies")
+  replyToId String?
+  replyTo   DirectMessage?  @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   DirectMessage[] @relation("DMReplies")
 
   // Editing
-  edited      Boolean  @default(false)
-  editedAt    DateTime?
+  edited   Boolean   @default(false)
+  editedAt DateTime?
 
   // Read status
-  read        Boolean  @default(false)
-  readAt      DateTime?
+  read   Boolean   @default(false)
+  readAt DateTime?
 
   // Soft delete (per user)
   deletedBySender   Boolean @default(false)
   deletedByReceiver Boolean @default(false)
 
   // Relations
-  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([senderId, receiverId, createdAt])
   @@index([receiverId, read])
@@ -841,38 +1017,38 @@ model DirectMessage {
 
 // Chat Attachments (files, images, audio, video)
 model ChatAttachment {
-  id            String   @id @default(cuid())
-  userId        String
-  channelId     String?
-  messageId     String?
+  id        String  @id @default(cuid())
+  userId    String
+  channelId String?
+  messageId String?
 
   // File info
-  filename      String
-  key           String   // R2 storage key
-  url           String   // Public or signed URL
-  thumbnailUrl  String?  // For images/videos
-  contentType   String
-  size          Int
-  category      String   // image, video, audio, document, archive
+  filename     String
+  key          String // R2 storage key
+  url          String // Public or signed URL
+  thumbnailUrl String? // For images/videos
+  contentType  String
+  size         Int
+  category     String // image, video, audio, document, archive
 
   // Processing
-  status        String   @default("pending") // pending, uploaded, processing, ready, deleted
-  metadata      Json?    // Width, height, duration, etc.
+  status   String @default("pending") // pending, uploaded, processing, ready, deleted
+  metadata Json? // Width, height, duration, etc.
 
   // Voice transcription (for audio/voice messages)
-  transcription       String?  @db.Text // Transcribed text from Whisper
-  transcriptionStatus String?  // pending, processing, completed, failed
-  duration            Int?     // Duration in seconds for audio/video
-  waveform            Json?    // Waveform visualization data [40 bars]
+  transcription       String? @db.Text // Transcribed text from Whisper
+  transcriptionStatus String? // pending, processing, completed, failed
+  duration            Int? // Duration in seconds for audio/video
+  waveform            Json? // Waveform visualization data [40 bars]
 
   // Timestamps
-  uploadedAt    DateTime?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  uploadedAt DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   // Relations
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel       ChatChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel ChatChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([channelId])
@@ -882,38 +1058,38 @@ model ChatAttachment {
 
 // E2E Encryption Keys for DMs
 model UserKeyBundle {
-  id              String   @id @default(cuid())
-  userId          String   @unique
+  id     String @id @default(cuid())
+  userId String @unique
 
   // Identity key (long-term)
-  identityPublicKey   String
+  identityPublicKey String
 
   // Signed prekey (medium-term, rotated periodically)
-  signedPrekeyId      Int
-  signedPrekeyPublic  String
+  signedPrekeyId        Int
+  signedPrekeyPublic    String
   signedPrekeySignature String
 
   // One-time prekeys (consumed on use)
   // Stored separately in UserOneTimePrekey
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  oneTimePrekeys  UserOneTimePrekey[]
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oneTimePrekeys UserOneTimePrekey[]
 }
 
 model UserOneTimePrekey {
-  id            String   @id @default(cuid())
-  keyBundleId   String
-  keyId         Int
-  publicKey     String
-  used          Boolean  @default(false)
-  usedAt        DateTime?
-  createdAt     DateTime @default(now())
+  id          String    @id @default(cuid())
+  keyBundleId String
+  keyId       Int
+  publicKey   String
+  used        Boolean   @default(false)
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
 
-  keyBundle     UserKeyBundle @relation(fields: [keyBundleId], references: [id], onDelete: Cascade)
+  keyBundle UserKeyBundle @relation(fields: [keyBundleId], references: [id], onDelete: Cascade)
 
   @@unique([keyBundleId, keyId])
   @@index([keyBundleId, used])
@@ -921,27 +1097,27 @@ model UserOneTimePrekey {
 
 // Encrypted DM Sessions (Double Ratchet state)
 model EncryptedSession {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Participants (sorted IDs for consistent lookup)
-  participantIds  String   // Comma-separated sorted user IDs
+  participantIds String // Comma-separated sorted user IDs
 
   // Session state (encrypted, stored per-device)
-  userId          String   // Owner of this session state
-  deviceId        String
+  userId   String // Owner of this session state
+  deviceId String
 
   // Double Ratchet state (encrypted with device key)
-  rootKey         String   // Encrypted
-  chainKey        String   // Encrypted
-  messageNumber   Int      @default(0)
+  rootKey       String // Encrypted
+  chainKey      String // Encrypted
+  messageNumber Int    @default(0)
 
   // Their ratchet public key
   theirRatchetPublic String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([participantIds, userId, deviceId])
   @@index([userId])
@@ -949,22 +1125,22 @@ model EncryptedSession {
 
 // Safety Numbers for verification
 model SafetyNumber {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Users involved (sorted)
-  user1Id         String
-  user2Id         String
+  user1Id String
+  user2Id String
 
   // Fingerprint (derived from identity keys)
-  fingerprint     String
+  fingerprint String
 
   // Verification status
-  verifiedByUser1 Boolean  @default(false)
-  verifiedByUser2 Boolean  @default(false)
+  verifiedByUser1 Boolean   @default(false)
+  verifiedByUser2 Boolean   @default(false)
   verifiedAt      DateTime?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
 }
@@ -975,21 +1151,21 @@ model SafetyNumber {
 
 // User's encrypted wallets for trading
 model UserWallet {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  nickname      String   // "Main Account", "Bot Account", "Test Wallet"
-  address       String   // Public wallet address (for display)
-  encryptedKey  String   @db.Text // AES-256-GCM encrypted private key
-  salt          String   // Salt for key derivation (Argon2id)
+  nickname     String // "Main Account", "Bot Account", "Test Wallet"
+  address      String // Public wallet address (for display)
+  encryptedKey String @db.Text // AES-256-GCM encrypted private key
+  salt         String // Salt for key derivation (Argon2id)
 
   // Metadata
-  isDefault     Boolean  @default(false) // Default wallet for manual trading
-  lastUsedAt    DateTime?
+  isDefault  Boolean   @default(false) // Default wallet for manual trading
+  lastUsedAt DateTime?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   bots          BotConfig[]
@@ -1002,39 +1178,39 @@ model UserWallet {
 
 // Bot configurations for automated trading
 model BotConfig {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  walletId      String
-  wallet        UserWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id       String     @id @default(cuid())
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId String
+  wallet   UserWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
-  name          String   // "BOS Breakout Bot", "Mean Reversion ETH"
-  symbol        String   // "BTC", "ETH", "SOL"
-  strategyType  String   // "bos-breakout", "mean-reversion", "75-retracement"
+  name         String // "BOS Breakout Bot", "Mean Reversion ETH"
+  symbol       String // "BTC", "ETH", "SOL"
+  strategyType String // "bos-breakout", "mean-reversion", "75-retracement"
 
   // Strategy parameters (JSON for flexibility)
-  parameters    Json     // Strategy-specific settings
+  parameters Json // Strategy-specific settings
 
   // Risk management
-  riskSettings  Json     // { riskPerTrade: 1, maxDailyLoss: 5, leverage: 10, maxPositions: 3 }
+  riskSettings Json // { riskPerTrade: 1, maxDailyLoss: 5, leverage: 10, maxPositions: 3 }
 
   // Status
-  status        String   @default("stopped") // "running", "stopped", "error", "paused"
-  statusMessage String?  // Error message or status details
+  status        String  @default("stopped") // "running", "stopped", "error", "paused"
+  statusMessage String? // Error message or status details
 
   // Execution tracking
   lastRunAt     DateTime?
   lastTradeAt   DateTime?
-  totalTrades   Int      @default(0)
-  winningTrades Int      @default(0)
-  losingTrades  Int      @default(0)
-  totalPnl      Float    @default(0)
+  totalTrades   Int       @default(0)
+  winningTrades Int       @default(0)
+  losingTrades  Int       @default(0)
+  totalPnl      Float     @default(0)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  trades        Trade[]
+  trades Trade[]
 
   @@index([userId, status])
   @@index([walletId])
@@ -1042,48 +1218,48 @@ model BotConfig {
 
 // Trade history (manual and bot trades)
 model Trade {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  walletId      String
-  wallet        UserWallet @relation(fields: [walletId], references: [id])
-  botId         String?  // Null for manual trades
-  bot           BotConfig? @relation(fields: [botId], references: [id], onDelete: SetNull)
+  id       String     @id @default(cuid())
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId String
+  wallet   UserWallet @relation(fields: [walletId], references: [id])
+  botId    String? // Null for manual trades
+  bot      BotConfig? @relation(fields: [botId], references: [id], onDelete: SetNull)
 
   // Trade details
-  symbol        String   // "BTC", "ETH"
-  side          String   // "long" or "short"
-  size          Float    // Position size in base currency
-  leverage      Int      @default(1)
+  symbol   String // "BTC", "ETH"
+  side     String // "long" or "short"
+  size     Float // Position size in base currency
+  leverage Int    @default(1)
 
   // Prices
-  entryPrice    Float
-  exitPrice     Float?
-  stopLoss      Float?
-  takeProfit    Float?
+  entryPrice Float
+  exitPrice  Float?
+  stopLoss   Float?
+  takeProfit Float?
 
   // P&L
-  pnl           Float?   // Realized P&L in USD
-  pnlPercent    Float?   // Percentage gain/loss
-  fees          Float?   // Trading fees paid
+  pnl        Float? // Realized P&L in USD
+  pnlPercent Float? // Percentage gain/loss
+  fees       Float? // Trading fees paid
 
   // Status
-  status        String   // "open", "closed", "cancelled", "liquidated"
-  closeReason   String?  // "tp_hit", "sl_hit", "manual", "liquidated", "bot_signal"
+  status      String // "open", "closed", "cancelled", "liquidated"
+  closeReason String? // "tp_hit", "sl_hit", "manual", "liquidated", "bot_signal"
 
   // Hyperliquid order IDs
-  entryOrderId  String?
-  exitOrderId   String?
-  slOrderId     String?
-  tpOrderId     String?
+  entryOrderId String?
+  exitOrderId  String?
+  slOrderId    String?
+  tpOrderId    String?
 
   // Timestamps
-  openedAt      DateTime @default(now())
-  closedAt      DateTime?
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
 
   // Metadata
-  notes         String?  @db.Text // Trade notes (timeframe, source, etc.)
-  metadata      Json?    // Additional trade data (signals, patterns, etc.)
+  notes    String? @db.Text // Trade notes (timeframe, source, etc.)
+  metadata Json? // Additional trade data (signals, patterns, etc.)
 
   @@index([userId, status])
   @@index([walletId])
@@ -1094,33 +1270,33 @@ model Trade {
 
 // Extension API keys for TradingView bridge
 model ExtensionKey {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  walletId      String
-  wallet        UserWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id       String     @id @default(cuid())
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId String
+  wallet   UserWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   // API Key (hashed for security comparison, or stored encrypted)
-  key           String   @unique // API key for authentication
-  name          String   // "TradingView Chrome Extension"
+  key  String @unique // API key for authentication
+  name String // "TradingView Chrome Extension"
 
   // Default trade settings for extension
-  asset         String   @default("BTC")
-  riskAmount    Float    @default(1.0)
-  leverage      Int      @default(25)
+  asset      String @default("BTC")
+  riskAmount Float  @default(1.0)
+  leverage   Int    @default(25)
 
   // Wallet password (encrypted, needed for trade execution)
   walletPassword String? @db.Text // AES encrypted wallet password
 
   // Usage tracking
-  lastUsedAt    DateTime?
-  usageCount    Int      @default(0)
+  lastUsedAt DateTime?
+  usageCount Int       @default(0)
 
   // Status
-  active        Boolean  @default(true)
+  active Boolean @default(true)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([walletId])
@@ -1132,22 +1308,22 @@ model ExtensionKey {
 
 // Friend Request - required before DM
 model FriendRequest {
-  id          String   @id @default(cuid())
-  senderId    String
-  receiverId  String
+  id         String @id @default(cuid())
+  senderId   String
+  receiverId String
 
   // Initial message with request
-  message     String?  @db.Text
+  message String? @db.Text
 
   // Status: pending, accepted, declined, blocked
-  status      String   @default("pending")
+  status String @default("pending")
 
   // Relations
-  sender      User     @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User     @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender   User @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   respondedAt DateTime?
 
   @@unique([senderId, receiverId])
@@ -1157,21 +1333,21 @@ model FriendRequest {
 
 // Friendship - established after request accepted
 model Friendship {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // Always store with smaller ID as user1 for consistency
-  user1Id     String
-  user2Id     String
+  user1Id String
+  user2Id String
 
   // Relations
-  user1       User     @relation("FriendUser1", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2       User     @relation("FriendUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  user1 User @relation("FriendUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2 User @relation("FriendUser2", fields: [user2Id], references: [id], onDelete: Cascade)
 
   // Blocked status (by either user)
   blockedByUser1 Boolean @default(false)
   blockedByUser2 Boolean @default(false)
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([user1Id, user2Id])
   @@index([user1Id])
@@ -1210,62 +1386,62 @@ enum ImplementationStatus {
 }
 
 model Feedback {
-  id              String         @id @default(cuid())
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Ownership
-  userId          String
-  user            User           @relation("UserFeedback", fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("UserFeedback", fields: [userId], references: [id], onDelete: Cascade)
 
   // Type and priority
-  type            FeedbackType   @default(OTHER)
-  priority        Int            @default(0) // User-set or admin-set priority
-  status          FeedbackStatus @default(PENDING)
+  type     FeedbackType   @default(OTHER)
+  priority Int            @default(0) // User-set or admin-set priority
+  status   FeedbackStatus @default(PENDING)
 
   // Trading Indicator Feedback (optional, for indicator-specific feedback)
-  indicator       String?        // "BOS", "Swings", "MSB", "CHoCH", "FVG", "Liquidity", "POI", "Trend", "MTF", "Structure", "Other"
-  customIndicator String?        // Custom indicator name if indicator === "Other"
+  indicator       String? // "BOS", "Swings", "MSB", "CHoCH", "FVG", "Liquidity", "POI", "Trend", "MTF", "Structure", "Other"
+  customIndicator String? // Custom indicator name if indicator === "Other"
 
   // Content - Voice OR Text
-  textContent     String?        @db.Text // Text description
-  voiceAttachmentId String?      // Voice message attachment ID
-  voiceTranscription String?     @db.Text // Auto-transcribed from voice
+  textContent        String? @db.Text // Text description
+  voiceAttachmentId  String? // Voice message attachment ID
+  voiceTranscription String? @db.Text // Auto-transcribed from voice
 
   // Additional details
-  title           String?        // Optional title
-  stepsToReproduce String?      @db.Text
-  expectedBehavior String?      @db.Text
-  actualBehavior   String?      @db.Text
+  title            String? // Optional title
+  stepsToReproduce String? @db.Text
+  expectedBehavior String? @db.Text
+  actualBehavior   String? @db.Text
 
   // Context (auto-captured)
-  pageUrl         String?        // URL where feedback was submitted
-  pagePath        String?        // Route path
-  userAgent       String?        @db.Text // Browser info
-  screenResolution String?       // e.g., "1920x1080"
-  viewport        String?        // e.g., "1200x800"
+  pageUrl          String? // URL where feedback was submitted
+  pagePath         String? // Route path
+  userAgent        String? @db.Text // Browser info
+  screenResolution String? // e.g., "1920x1080"
+  viewport         String? // e.g., "1200x800"
 
   // Attachments (screenshots, videos, documents)
-  attachments     FeedbackAttachment[]
-  comments        FeedbackComment[]
+  attachments FeedbackAttachment[]
+  comments    FeedbackComment[]
 
   // Implementation
-  implementedAt   DateTime?
-  implementedById String?
-  implementedBy   User?          @relation("ImplementedFeedback", fields: [implementedById], references: [id])
-  implementationNotes String?    @db.Text
+  implementedAt       DateTime?
+  implementedById     String?
+  implementedBy       User?     @relation("ImplementedFeedback", fields: [implementedById], references: [id])
+  implementationNotes String?   @db.Text
 
   // Autonomous Implementation System
   implementationStatus ImplementationStatus @default(PENDING)
-  claudeSessionId      String?              // Claude Code session tracking
-  implementationLog    Json?                // Detailed log of implementation steps
-  implementationPlan   Json?                // Parsed plan with tasks
-  currentTask          String?              // Currently executing task
-  deploymentStatus     String?              // Deployment status (queued, deploying, deployed, failed)
-  deploymentUrl        String?              // Vercel deployment URL
+  claudeSessionId      String? // Claude Code session tracking
+  implementationLog    Json? // Detailed log of implementation steps
+  implementationPlan   Json? // Parsed plan with tasks
+  currentTask          String? // Currently executing task
+  deploymentStatus     String? // Deployment status (queued, deploying, deployed, failed)
+  deploymentUrl        String? // Vercel deployment URL
   notificationSent     Boolean              @default(false) // Email notification sent
-  processedAt          DateTime?            // When Claude started processing
-  completedAt          DateTime?            // When implementation completed
+  processedAt          DateTime? // When Claude started processing
+  completedAt          DateTime? // When implementation completed
   errorMessage         String?              @db.Text // Last error if failed
   retryCount           Int                  @default(0) // Number of retry attempts
   maxRetries           Int                  @default(3) // Max retry attempts before giving up
@@ -1278,42 +1454,42 @@ model Feedback {
 }
 
 model FeedbackAttachment {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
-  feedbackId  String
-  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  feedbackId String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
   // File info (reuses R2 upload infrastructure)
   filename    String
   url         String
   contentType String
   size        Int
-  category    String   // screenshot, video, document, voice
+  category    String // screenshot, video, document, voice
 
   // For images/videos
-  width       Int?
-  height      Int?
-  duration    Int?     // For videos/voice
+  width    Int?
+  height   Int?
+  duration Int? // For videos/voice
 
   @@index([feedbackId])
 }
 
 model FeedbackComment {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  feedbackId  String
-  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  feedbackId String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
-  userId      String
-  user        User     @relation("FeedbackComments", fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("FeedbackComments", fields: [userId], references: [id], onDelete: Cascade)
 
-  content     String   @db.Text
-  isInternal  Boolean  @default(false) // Admin-only comments
+  content    String  @db.Text
+  isInternal Boolean @default(false) // Admin-only comments
 
-  editedAt    DateTime?
+  editedAt DateTime?
 
   @@index([feedbackId, createdAt])
   @@index([userId])
@@ -1326,147 +1502,147 @@ model FeedbackComment {
 
 enum IndicatorType {
   // Price Action (9)
-  SWINGS               // Already implemented (REVIEW)
-  BREAK_OF_STRUCTURE   // BOS (already implemented as BETA)
+  SWINGS // Already implemented (REVIEW)
+  BREAK_OF_STRUCTURE // BOS (already implemented as BETA)
   MARKET_STRUCTURE_BREAK // MSB (already implemented as BETA)
-  CHANGE_OF_CHARACTER  // CHoCH (SOON)
-  TRADING_RANGE        // range (SOON)
-  FALSE_BREAKOUT       // false_breakout (SOON)
-  LIQUIDITY_SWEEP      // liquidity_sweep (SOON)
-  LIQUIDITY_GRAB       // liquidity_grab (SOON)
-  STOP_HUNT            // stop_hunt (SOON)
+  CHANGE_OF_CHARACTER // CHoCH (SOON)
+  TRADING_RANGE // range (SOON)
+  FALSE_BREAKOUT // false_breakout (SOON)
+  LIQUIDITY_SWEEP // liquidity_sweep (SOON)
+  LIQUIDITY_GRAB // liquidity_grab (SOON)
+  STOP_HUNT // stop_hunt (SOON)
 
   // Support & Resistance (3)
-  SUPPORT_RESISTANCE   // support_resistance (SOON)
-  PIVOT_POINTS         // pivot_points (SOON)
+  SUPPORT_RESISTANCE // support_resistance (SOON)
+  PIVOT_POINTS // pivot_points (SOON)
   PSYCHOLOGICAL_LEVELS // psychological_levels (SOON)
 
   // Order Blocks / ICT (4)
-  ORDER_BLOCK          // order_block (SOON)
-  BREAKER_BLOCK        // breaker_block (SOON)
-  MITIGATION_BLOCK     // mitigation_block (SOON)
-  REJECTION_BLOCK      // rejection_block (SOON)
+  ORDER_BLOCK // order_block (SOON)
+  BREAKER_BLOCK // breaker_block (SOON)
+  MITIGATION_BLOCK // mitigation_block (SOON)
+  REJECTION_BLOCK // rejection_block (SOON)
 
   // Fair Value Gaps (3)
-  FAIR_VALUE_GAP       // fvg (SOON)
-  BISI                 // BISI - Buyside Imbalance Sellside Inefficiency (SOON)
-  SIBI                 // SIBI - Sellside Imbalance Buyside Inefficiency (SOON)
+  FAIR_VALUE_GAP // fvg (SOON)
+  BISI // BISI - Buyside Imbalance Sellside Inefficiency (SOON)
+  SIBI // SIBI - Sellside Imbalance Buyside Inefficiency (SOON)
 
   // Supply & Demand (3)
-  SUPPLY_ZONE          // supply_zone (SOON)
-  DEMAND_ZONE          // demand_zone (SOON)
-  IMBALANCE            // imbalance (SOON)
+  SUPPLY_ZONE // supply_zone (SOON)
+  DEMAND_ZONE // demand_zone (SOON)
+  IMBALANCE // imbalance (SOON)
 
   // Fibonacci (3)
   FIBONACCI_RETRACEMENT // fibonacci_retracement (SOON)
-  FIBONACCI_EXTENSION   // fibonacci_extension (SOON)
-  FIBONACCI_TIME        // fibonacci_time (SOON)
+  FIBONACCI_EXTENSION // fibonacci_extension (SOON)
+  FIBONACCI_TIME // fibonacci_time (SOON)
 
   // Trend Analysis (4)
-  TREND_LINES          // trend_lines (SOON)
-  CHANNELS             // channels (SOON)
-  WEDGES               // wedges (SOON)
-  TRIANGLES            // triangles (SOON)
+  TREND_LINES // trend_lines (SOON)
+  CHANNELS // channels (SOON)
+  WEDGES // wedges (SOON)
+  TRIANGLES // triangles (SOON)
 
   // Classic Patterns (7)
-  HEAD_SHOULDERS       // head_shoulders (SOON)
-  DOUBLE_TOP           // double_top (SOON)
-  DOUBLE_BOTTOM        // double_bottom (SOON)
-  TRIPLE_TOP           // triple_top (SOON)
-  TRIPLE_BOTTOM        // triple_bottom (SOON)
-  CUP_HANDLE           // cup_handle (SOON)
-  FLAGS_PENNANTS       // flags + pennants (SOON)
+  HEAD_SHOULDERS // head_shoulders (SOON)
+  DOUBLE_TOP // double_top (SOON)
+  DOUBLE_BOTTOM // double_bottom (SOON)
+  TRIPLE_TOP // triple_top (SOON)
+  TRIPLE_BOTTOM // triple_bottom (SOON)
+  CUP_HANDLE // cup_handle (SOON)
+  FLAGS_PENNANTS // flags + pennants (SOON)
 
   // Candlestick Patterns (11)
-  ENGULFING            // engulfing (SOON)
-  DOJI                 // doji (SOON)
-  HAMMER               // hammer (SOON)
-  SHOOTING_STAR        // shooting_star (SOON)
-  MORNING_STAR         // morning_star (SOON)
-  EVENING_STAR         // evening_star (SOON)
+  ENGULFING // engulfing (SOON)
+  DOJI // doji (SOON)
+  HAMMER // hammer (SOON)
+  SHOOTING_STAR // shooting_star (SOON)
+  MORNING_STAR // morning_star (SOON)
+  EVENING_STAR // evening_star (SOON)
   THREE_WHITE_SOLDIERS // three_white_soldiers (SOON)
-  THREE_BLACK_CROWS    // three_black_crows (SOON)
-  HARAMI               // harami (SOON)
-  PIERCING_LINE        // piercing_line (SOON)
-  DARK_CLOUD_COVER     // dark_cloud_cover (SOON)
+  THREE_BLACK_CROWS // three_black_crows (SOON)
+  HARAMI // harami (SOON)
+  PIERCING_LINE // piercing_line (SOON)
+  DARK_CLOUD_COVER // dark_cloud_cover (SOON)
 
   // Volume Analysis (3)
-  VOLUME_PROFILE       // volume_profile (SOON)
-  VOLUME_DIVERGENCE    // volume_divergence (SOON)
-  VOLUME_CLIMAX        // volume_climax (SOON)
+  VOLUME_PROFILE // volume_profile (SOON)
+  VOLUME_DIVERGENCE // volume_divergence (SOON)
+  VOLUME_CLIMAX // volume_climax (SOON)
 
   // Indicators (5)
-  MA_CROSSOVER         // ma_crossover (SOON)
-  RSI_DIVERGENCE       // rsi_divergence (SOON)
-  MACD_SIGNAL          // macd_signal (SOON)
-  BOLLINGER_BANDS      // bollinger_bands (SOON)
-  VWAP                 // vwap (SOON)
+  MA_CROSSOVER // ma_crossover (SOON)
+  RSI_DIVERGENCE // rsi_divergence (SOON)
+  MACD_SIGNAL // macd_signal (SOON)
+  BOLLINGER_BANDS // bollinger_bands (SOON)
+  VWAP // vwap (SOON)
 
   // Other
   OTHER
 }
 
 enum ReasoningStatus {
-  PENDING      // Awaiting review
+  PENDING // Awaiting review
   UNDER_REVIEW // Being evaluated
-  APPROVED     // Good reasoning, will implement
-  IMPLEMENTED  // Algorithm created
-  REJECTED     // Not actionable
+  APPROVED // Good reasoning, will implement
+  IMPLEMENTED // Algorithm created
+  REJECTED // Not actionable
 }
 
 model IndicatorReasoning {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Ownership
-  userId        String
-  user          User     @relation("IndicatorReasoningSubmissions", fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("IndicatorReasoningSubmissions", fields: [userId], references: [id], onDelete: Cascade)
 
   // What indicator
   indicatorType IndicatorType
-  customName    String?  // If indicatorType === OTHER
+  customName    String? // If indicatorType === OTHER
 
   // Submission content
-  title         String
-  description   String   @db.Text
+  title       String
+  description String @db.Text
 
   // Supporting materials (URLs from R2)
-  screenshots   Json?    // [{id, url, caption, width, height}]
-  videos        Json?    // [{id, url, caption, duration}]
-  voiceNotes    Json?    // [{id, url, duration, transcription}]
+  screenshots Json? // [{id, url, caption, width, height}]
+  videos      Json? // [{id, url, caption, duration}]
+  voiceNotes  Json? // [{id, url, duration, transcription}]
 
   // Optional context
-  symbol        String?  // "BTC", "ETH" - which chart they're referencing
-  timeframe     String?  // "5m", "1h", "4h"
-  candleData    Json?    // Optional: {startTime, endTime, candleRange}
+  symbol     String? // "BTC", "ETH" - which chart they're referencing
+  timeframe  String? // "5m", "1h", "4h"
+  candleData Json? // Optional: {startTime, endTime, candleRange}
 
   // Algorithm ideas (optional, in plain English)
-  algorithmIdea String?  @db.Text
-  pseudocode    String?  @db.Text
+  algorithmIdea String? @db.Text
+  pseudocode    String? @db.Text
 
   // Community engagement
-  votes         Int      @default(0)
-  viewCount     Int      @default(0)
+  votes     Int @default(0)
+  viewCount Int @default(0)
 
   // Status tracking
-  status        ReasoningStatus @default(PENDING)
-  reviewedAt    DateTime?
-  reviewedById  String?
-  reviewNotes   String?  @db.Text
+  status       ReasoningStatus @default(PENDING)
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewNotes  String?         @db.Text
 
   // Implementation tracking (same as Feedback)
   implementationStatus ImplementationStatus @default(PENDING)
   implementedAt        DateTime?
   implementedById      String?
-  implementedBy        User?   @relation("ImplementedIndicatorReasoning", fields: [implementedById], references: [id])
+  implementedBy        User?                @relation("ImplementedIndicatorReasoning", fields: [implementedById], references: [id])
 
   // Claude Code processing
-  claudeSessionId      String?
-  implementationLog    Json?
-  processedAt          DateTime?
-  errorMessage         String?  @db.Text
-  retryCount           Int      @default(0)
+  claudeSessionId   String?
+  implementationLog Json?
+  processedAt       DateTime?
+  errorMessage      String?   @db.Text
+  retryCount        Int       @default(0)
 
   @@index([userId, createdAt])
   @@index([indicatorType, status])
