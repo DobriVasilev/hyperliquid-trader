@@ -193,24 +193,14 @@ const SYMBOL_TO_COINGECKO: Record<string, string> = {
 
 // Get coin icon with multiple fallbacks
 function getCoinIcon(symbol: string): string | undefined {
+  // Use CoinCap API - simple, no auth required, works for most major coins
+  // Format: https://assets.coincap.io/assets/icons/{symbol}@2x.png
+  // This was working before and has good coverage
+
   const lowerSymbol = symbol.toLowerCase();
 
-  // For common/major coins, use CryptoCompare (most reliable, high quality icons)
-  const majorCoins = ["btc", "eth", "sol", "doge", "xrp", "hype", "avax", "link", "arb", "op",
-    "matic", "apt", "sui", "sei", "tia", "inj", "near", "atom", "ftm", "aave"];
-
-  if (majorCoins.includes(lowerSymbol)) {
-    return `https://www.cryptocompare.com/media/37746251/${lowerSymbol}.png`;
-  }
-
-  // For all other coins, try CoinGecko if we have a mapping
-  const coingeckoId = SYMBOL_TO_COINGECKO[symbol.toUpperCase()];
-  if (coingeckoId) {
-    return `https://assets.coingecko.com/coins/images/small/${coingeckoId}.png`;
-  }
-
-  // Return undefined to use the gradient fallback in the UI
-  return undefined;
+  // CoinCap has good coverage for major coins
+  return `https://assets.coincap.io/assets/icons/${lowerSymbol}@2x.png`;
 }
 
 export async function GET() {

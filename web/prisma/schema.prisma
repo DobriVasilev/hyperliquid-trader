@@ -1255,15 +1255,44 @@ model FeedbackComment {
 // ============================================================================
 
 enum IndicatorType {
+  // Price Action Patterns (SOON indicators from screenshot)
   CHANGE_OF_CHARACTER  // CHoCH
   TRADING_RANGE
   FALSE_BREAKOUT
   LIQUIDITY_SWEEP
+  LIQUIDITY_GRAB
   STOP_HUNT
-  FAIR_VALUE_GAP      // FVG
-  PREMIUM_DISCOUNT    // Premium/Discount zones
+
+  // ICT / Smart Money Concepts
+  FAIR_VALUE_GAP       // FVG
+  PREMIUM_DISCOUNT     // Premium/Discount zones
   INDUCEMENT
-  MARKET_STRUCTURE    // General MS concepts
+  ORDER_BLOCK          // OB
+  BREAKER_BLOCK
+  MITIGATION_BLOCK
+
+  // Support & Resistance
+  SUPPORT_RESISTANCE
+  SUPPLY_DEMAND_ZONE
+  KEY_LEVEL
+
+  // Market Structure
+  MARKET_STRUCTURE     // General MS concepts
+  BREAK_OF_STRUCTURE   // BOS (already implemented as BETA)
+  MARKET_STRUCTURE_BREAK // MSB (already implemented as BETA)
+  SWING_POINTS         // Already implemented (REVIEW)
+  HIGHER_HIGH_LOWER_LOW // HH, HL, LH, LL
+
+  // Trend & Momentum
+  TREND_LINE
+  CHANNEL
+  FIBONACCI_LEVELS
+
+  // Volume & Liquidity
+  VOLUME_PROFILE
+  LIQUIDITY_VOID
+
+  // Other
   OTHER
 }
 

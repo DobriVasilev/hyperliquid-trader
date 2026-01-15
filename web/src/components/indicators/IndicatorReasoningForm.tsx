@@ -18,16 +18,45 @@ interface IndicatorReasoningFormProps {
 }
 
 const INDICATOR_TYPES = [
-  { value: "CHANGE_OF_CHARACTER", label: "Change of Character (CHoCH)", description: "When the market changes from bullish to bearish or vice versa" },
-  { value: "TRADING_RANGE", label: "Trading Range", description: "Sideways price movement between support and resistance" },
-  { value: "FALSE_BREAKOUT", label: "False Breakout", description: "Price breaks a level but quickly reverses" },
-  { value: "LIQUIDITY_SWEEP", label: "Liquidity Sweep", description: "Stop hunt before real price movement" },
-  { value: "STOP_HUNT", label: "Stop Hunt", description: "Market deliberately triggers stops before reversal" },
-  { value: "FAIR_VALUE_GAP", label: "Fair Value Gap (FVG)", description: "Imbalance in price that tends to get filled" },
-  { value: "PREMIUM_DISCOUNT", label: "Premium/Discount Zones", description: "Areas where price is overextended" },
-  { value: "INDUCEMENT", label: "Inducement", description: "Price action designed to trap traders" },
-  { value: "MARKET_STRUCTURE", label: "Market Structure", description: "General market structure concepts" },
-  { value: "OTHER", label: "Other", description: "Another pattern type" },
+  // Price Action Patterns
+  { value: "CHANGE_OF_CHARACTER", label: "Change of Character (CHoCH)", description: "Market changes from bullish to bearish or vice versa", category: "Price Action" },
+  { value: "TRADING_RANGE", label: "Trading Range", description: "Sideways price movement between support and resistance", category: "Price Action" },
+  { value: "FALSE_BREAKOUT", label: "False Breakout", description: "Price breaks a level but quickly reverses", category: "Price Action" },
+  { value: "LIQUIDITY_SWEEP", label: "Liquidity Sweep", description: "Stop hunt before real price movement", category: "Price Action" },
+  { value: "LIQUIDITY_GRAB", label: "Liquidity Grab", description: "Market grabs liquidity before moving", category: "Price Action" },
+  { value: "STOP_HUNT", label: "Stop Hunt", description: "Market deliberately triggers stops before reversal", category: "Price Action" },
+
+  // ICT / Smart Money Concepts
+  { value: "FAIR_VALUE_GAP", label: "Fair Value Gap (FVG)", description: "Imbalance in price that tends to get filled", category: "ICT/SMC" },
+  { value: "PREMIUM_DISCOUNT", label: "Premium/Discount Zones", description: "Areas where price is overextended", category: "ICT/SMC" },
+  { value: "INDUCEMENT", label: "Inducement", description: "Price action designed to trap traders", category: "ICT/SMC" },
+  { value: "ORDER_BLOCK", label: "Order Block (OB)", description: "Institutional buying/selling zones", category: "ICT/SMC" },
+  { value: "BREAKER_BLOCK", label: "Breaker Block", description: "Failed order block that becomes opposite", category: "ICT/SMC" },
+  { value: "MITIGATION_BLOCK", label: "Mitigation Block", description: "Area where imbalance gets mitigated", category: "ICT/SMC" },
+
+  // Support & Resistance
+  { value: "SUPPORT_RESISTANCE", label: "Support & Resistance", description: "Key price levels where reversals occur", category: "S&R" },
+  { value: "SUPPLY_DEMAND_ZONE", label: "Supply/Demand Zone", description: "Areas of significant buying/selling pressure", category: "S&R" },
+  { value: "KEY_LEVEL", label: "Key Level", description: "Important psychological or technical price level", category: "S&R" },
+
+  // Market Structure
+  { value: "MARKET_STRUCTURE", label: "Market Structure", description: "General market structure concepts", category: "Structure" },
+  { value: "BREAK_OF_STRUCTURE", label: "Break of Structure (BOS)", description: "Price breaks through structure", category: "Structure" },
+  { value: "MARKET_STRUCTURE_BREAK", label: "Market Structure Break (MSB)", description: "Significant structure break", category: "Structure" },
+  { value: "SWING_POINTS", label: "Swing Points", description: "Swing highs and swing lows", category: "Structure" },
+  { value: "HIGHER_HIGH_LOWER_LOW", label: "HH/HL/LH/LL", description: "Market structure patterns", category: "Structure" },
+
+  // Trend & Momentum
+  { value: "TREND_LINE", label: "Trend Line", description: "Line connecting highs or lows", category: "Trend" },
+  { value: "CHANNEL", label: "Channel", description: "Parallel trend lines", category: "Trend" },
+  { value: "FIBONACCI_LEVELS", label: "Fibonacci Levels", description: "Fib retracements and extensions", category: "Trend" },
+
+  // Volume & Liquidity
+  { value: "VOLUME_PROFILE", label: "Volume Profile", description: "Volume distribution at price levels", category: "Volume" },
+  { value: "LIQUIDITY_VOID", label: "Liquidity Void", description: "Area with little to no liquidity", category: "Volume" },
+
+  // Other
+  { value: "OTHER", label: "Other", description: "Another pattern type", category: "Other" },
 ];
 
 const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "12h", "1d", "1w"];
