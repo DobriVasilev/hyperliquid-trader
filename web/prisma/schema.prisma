@@ -55,6 +55,10 @@ model User {
   patternVotes     PatternVote[]
   patternMentions  PatternCommentMention[]
 
+  // Implementation Session relations
+  createdImplementationSessions    ImplementationSession[] @relation("CreatedImplementationSessions")
+  implementedImplementationSessions ImplementationSession[] @relation("ImplementedImplementationSessions")
+
   // Chat relations
   chatMessages       ChatMessage[]        @relation("ChatMessages")
   chatPresence       ChatPresence?
@@ -226,6 +230,72 @@ model SessionShare {
   createdAt  DateTime @default(now())
 
   @@unique([sessionId, userId])
+}
+
+// ============================================================================
+// IMPLEMENTATION SESSIONS (Claude Code Progress Tracking)
+// ============================================================================
+
+model ImplementationSession {
+  id            String   @id @default(cuid())
+
+  // What's being implemented
+  sessionId     String?  // If implementing pattern corrections
+  indicatorId   String?  // If implementing indicator reasoning
+  feedbackIds   String[] // Related feedback items (for aggregated implementations)
+
+  // Implementation metadata
+  title         String   // "Implement MSB corrections from session X"
+  description   String?  @db.Text
+  type          String   // "pattern_correction" | "indicator_implementation" | "bug_fix" | "feature"
+
+  // Progress tracking
+  phase         String   @default("planning") // planning | implementing | testing | refining | completed | failed
+  status        String   @default("active")   // active | paused | completed | failed | cancelled
+  progress      Int      @default(0)          // 0-100 percentage
+
+  // Phase breakdown with timestamps
+  phases        Json?    // { planning: {startedAt, completedAt, checkpoints: []}, implementing: {...}, etc. }
+
+  // Checkpoints (for collapsible sections)
+  checkpoints   Json?    // Array of {id, phase, title, status, startedAt, completedAt, details, tools[]}
+
+  // Live updates
+  currentTask   String?  // "Reading pattern detection files..."
+  log           Json?    // Array of log entries [{timestamp, message, level}]
+
+  // Results
+  filesChanged  String[] // Array of file paths that were modified
+  commitHash    String?  // Git commit hash after implementation
+  pullRequestUrl String? // GitHub PR URL if created
+  deploymentUrl String?  // Deployment URL after push
+
+  // Error handling
+  errors        Json?    // Array of errors encountered
+  retryCount    Int      @default(0)
+  maxRetries    Int      @default(3)
+
+  // Timing
+  estimatedDuration Int?     // Estimated time in minutes
+  actualDuration    Int?     // Actual time taken in minutes
+  startedAt         DateTime?
+  completedAt       DateTime?
+
+  // Created by (can be system for autonomous)
+  createdById   String
+  createdBy     User     @relation("CreatedImplementationSessions", fields: [createdById], references: [id])
+
+  // Implemented by Claude Code (user account)
+  implementedById String?
+  implementedBy   User?  @relation("ImplementedImplementationSessions", fields: [implementedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phase, status])
+  @@index([sessionId])
+  @@index([createdById])
+  @@index([createdAt])
 }
 
 // ============================================================================

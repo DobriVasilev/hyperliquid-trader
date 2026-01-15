@@ -18,7 +18,8 @@ import {
   Move,
   Copy,
   Download,
-  User
+  User,
+  Play
 } from "lucide-react";
 
 interface BugFeedback {
@@ -338,6 +339,32 @@ This defines the quality bar for ALL implementations.
     }
   }
 
+  async function startImplementation(sessionId: string, sessionName: string) {
+    try {
+      const response = await fetch("/api/implementation/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          title: `Implement corrections: ${sessionName}`,
+          description: `Implementing pattern corrections from session ${sessionName}`,
+          type: "pattern_correction",
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Redirect to implementation page
+        window.location.href = `/implementation/${data.implementation.id}`;
+      } else {
+        alert("Failed to start implementation: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Failed to start implementation:", err);
+      alert("Failed to start implementation");
+    }
+  }
+
   function downloadJSON(data: any, filename: string) {
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -582,6 +609,16 @@ This defines the quality bar for ALL implementations.
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              startImplementation(group.sessionId, group.sessionName);
+                            }}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                          >
+                            <Play className="w-4 h-4" />
+                            Start Implementation
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               copyClaudePrompt(group.sessionId, "session");
                             }}
                             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
@@ -594,7 +631,7 @@ This defines the quality bar for ALL implementations.
                             ) : (
                               <>
                                 <Copy className="w-4 h-4" />
-                                Copy Master Prompt
+                                Copy Prompt
                               </>
                             )}
                           </button>
