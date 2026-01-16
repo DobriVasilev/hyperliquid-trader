@@ -157,7 +157,7 @@ process_feedback() {
     # Note: Claude Code is interactive, so we need to handle it appropriately
     # For now, we'll use a simple approach with timeout and capturing output
 
-    if echo "$prompt_content" | timeout 600 claude > "$claude_output_file" 2> "$claude_error_file"; then
+    if echo "$prompt_content" | timeout 600 claude --dangerously-skip-permissions > "$claude_output_file" 2> "$claude_error_file"; then
         log_success "Claude Code execution completed successfully"
 
         # Update status to testing

@@ -49,6 +49,7 @@ module.exports = {
       env: {
         CLAUDE_WORKSPACE_PATH: '/tmp/claude-workspace',
         PROJECT_DIR: '/home/dobri/systems-trader/web',
+        PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
       },
     },
   ],
