@@ -14,6 +14,7 @@ import {
   Bot,
   BarChart3,
 } from "lucide-react";
+import { ClaudeExecutionPanel } from "./ClaudeExecutionPanel";
 
 interface SystemHealth {
   watcher: {
@@ -334,6 +335,12 @@ export function AdminDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Divider */}
+        <div className="border-t border-gray-800 my-8" />
+
+        {/* Claude Code Execution Panel */}
+        <ClaudeExecutionPanel />
       </div>
     </div>
   );

@@ -348,6 +348,9 @@ model PatternWorkspace {
   successRate   Float? // % of detections validated
   lastTestedAt  DateTime?
 
+  // Claude Code Session Management
+  claudeSessionId String? // Persistent Claude Code conversation ID for this workspace
+
   // Relations
   createdById String
   createdBy   User   @relation("CreatedWorkspaces", fields: [createdById], references: [id])
@@ -464,6 +467,11 @@ model ClaudeExecution {
   // Error handling
   error     String?   @db.Text
   erroredAt DateTime?
+
+  // Claude Code Session Management
+  claudeSessionId String? // Claude Code session ID (for resumption)
+  sessionResumed  Boolean @default(false) // Whether this execution resumed an existing session
+  claudeOutput    String? @db.Text // Full Claude Code transcript/output
 
   // Relations
   messages WorkspaceMessage[]
