@@ -330,6 +330,220 @@ async function generateWorkspacePrompt(workspace: any, sessions: any[], recentFa
   return prompt;
 }
 
+// Generate prompt from general feedback
+async function generateGeneralFeedbackPrompt(feedback: any): Promise<string> {
+  let prompt = `# 🐛 Universal Feedback Implementation Request\n\n`;
+  prompt += `**Type:** ${feedback.type.replace(/_/g, " ")}\n`;
+  if (feedback.title) {
+    prompt += `**Title:** ${feedback.title}\n`;
+  }
+  prompt += `**Submitted By:** ${feedback.user.name || feedback.user.email}\n`;
+  prompt += `**Submitted At:** ${new Date(feedback.createdAt).toLocaleString()}\n`;
+  prompt += `**Priority:** ${feedback.priority === 2 ? "Urgent" : feedback.priority === 1 ? "High" : "Normal"}\n\n`;
+
+  // Description
+  prompt += `## 📝 Description\n\n`;
+  prompt += `${feedback.textContent || feedback.voiceTranscription}\n\n`;
+
+  // Bug report specific details
+  if (feedback.type === "BUG_REPORT") {
+    if (feedback.stepsToReproduce) {
+      prompt += `## 🔄 Steps to Reproduce\n\n`;
+      prompt += `${feedback.stepsToReproduce}\n\n`;
+    }
+
+    if (feedback.expectedBehavior || feedback.actualBehavior) {
+      prompt += `## 🎯 Expected vs Actual Behavior\n\n`;
+      if (feedback.expectedBehavior) {
+        prompt += `**Expected:** ${feedback.expectedBehavior}\n\n`;
+      }
+      if (feedback.actualBehavior) {
+        prompt += `**Actual:** ${feedback.actualBehavior}\n\n`;
+      }
+    }
+  }
+
+  // Context information
+  if (feedback.pageUrl || feedback.pagePath) {
+    prompt += `## 🌐 Context\n\n`;
+    if (feedback.pageUrl) {
+      prompt += `**URL:** ${feedback.pageUrl}\n`;
+    }
+    if (feedback.pagePath) {
+      prompt += `**Path:** ${feedback.pagePath}\n`;
+    }
+    if (feedback.userAgent) {
+      prompt += `**User Agent:** ${feedback.userAgent}\n`;
+    }
+    if (feedback.viewport) {
+      prompt += `**Viewport:** ${feedback.viewport}\n`;
+    }
+    prompt += `\n`;
+  }
+
+  // Attachments
+  if (feedback.attachments && feedback.attachments.length > 0) {
+    prompt += `## 📎 Attachments\n\n`;
+    for (const att of feedback.attachments) {
+      prompt += `- **${att.filename}** (${att.category})\n`;
+      prompt += `  File path: \`${att.url}\`\n`;
+      if (att.category === "screenshot") {
+        prompt += `  Please analyze this screenshot for visual context.\n`;
+      }
+    }
+    prompt += `\n`;
+  }
+
+  // Task
+  prompt += `## 🎯 Task\n\n`;
+
+  if (feedback.type === "BUG_REPORT") {
+    prompt += `Fix the bug described above. `;
+    prompt += `Make sure to:\n`;
+    prompt += `1. Identify the root cause\n`;
+    prompt += `2. Implement a fix that addresses the underlying issue\n`;
+    prompt += `3. Test the fix to ensure it resolves the problem\n`;
+    prompt += `4. Verify no regressions were introduced\n\n`;
+  } else if (feedback.type === "FEATURE_REQUEST") {
+    prompt += `Implement the feature requested above. `;
+    prompt += `Make sure to:\n`;
+    prompt += `1. Design the feature with clean, maintainable code\n`;
+    prompt += `2. Follow existing patterns in the codebase\n`;
+    prompt += `3. Add appropriate error handling\n`;
+    prompt += `4. Test the implementation thoroughly\n\n`;
+  } else if (feedback.type === "UI_UX_ISSUE") {
+    prompt += `Fix the UI/UX issue described above. `;
+    prompt += `Make sure to:\n`;
+    prompt += `1. Maintain design consistency with the rest of the application\n`;
+    prompt += `2. Ensure responsive behavior across screen sizes\n`;
+    prompt += `3. Test accessibility\n`;
+    prompt += `4. Verify visual appearance matches expectations\n\n`;
+  } else if (feedback.type === "PERFORMANCE_ISSUE") {
+    prompt += `Optimize the performance issue described above. `;
+    prompt += `Make sure to:\n`;
+    prompt += `1. Profile to identify bottlenecks\n`;
+    prompt += `2. Implement optimizations without breaking functionality\n`;
+    prompt += `3. Measure improvement\n`;
+    prompt += `4. Document any trade-offs\n\n`;
+  } else {
+    prompt += `Address the feedback described above. `;
+    prompt += `Ensure the implementation meets the user's needs.\n\n`;
+  }
+
+  prompt += `After implementing:\n`;
+  prompt += `1. Run tests to verify everything works\n`;
+  prompt += `2. Commit with a descriptive message\n`;
+  prompt += `3. The system will automatically monitor deployment\n\n`;
+
+  return prompt;
+}
+
+// Check for general feedback items (dev_team/admin only)
+async function pollForGeneralFeedback() {
+  try {
+    // Find pending feedback from dev_team or admin users
+    const pendingFeedback = await prisma.feedback.findMany({
+      where: {
+        implementationStatus: "PENDING",
+        user: {
+          role: {
+            in: ["dev_team", "admin"],
+          },
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
+        attachments: true,
+      },
+      orderBy: [
+        { priority: "desc" },
+        { createdAt: "asc" },
+      ],
+      take: 1, // Process one at a time
+    });
+
+    if (pendingFeedback.length === 0) {
+      return false; // No general feedback to process
+    }
+
+    const feedback = pendingFeedback[0];
+
+    console.log(`[GENERAL FEEDBACK FOUND] ID: ${feedback.id}, Type: ${feedback.type}`);
+
+    // Update status to PROCESSING
+    await prisma.feedback.update({
+      where: { id: feedback.id },
+      data: {
+        implementationStatus: "PROCESSING",
+        processedAt: new Date(),
+      },
+    });
+
+    // Create execution record (reusing ClaudeExecution for tracking)
+    const execution = await prisma.claudeExecution.create({
+      data: {
+        workspaceId: null, // No workspace for general feedback
+        triggeredBy: feedback.userId,
+        status: "pending",
+        phase: "planning",
+        progress: 0,
+        sessionIds: [], // No sessions for general feedback
+        feedbackType: feedback.type,
+      },
+    });
+
+    // Generate prompt
+    const prompt = await generateGeneralFeedbackPrompt(feedback);
+
+    // Write prompt to file
+    const promptFile = path.join(WORKSPACE_DIR, "prompts", `feedback_${feedback.id}.md`);
+    fs.writeFileSync(promptFile, prompt);
+
+    // Create feedback queue file
+    const feedbackFile = path.join(FEEDBACK_QUEUE_DIR, `${execution.id}.json`);
+    const feedbackData = {
+      executionId: execution.id,
+      feedbackId: feedback.id,
+      feedbackType: feedback.type,
+      feedbackTitle: feedback.title,
+      userId: feedback.userId,
+      promptFile: promptFile,
+      timestamp: new Date().toISOString(),
+    };
+
+    fs.writeFileSync(feedbackFile, JSON.stringify(feedbackData, null, 2));
+
+    // Update execution with prompt file
+    await prisma.claudeExecution.update({
+      where: { id: execution.id },
+      data: {
+        promptFile: promptFile,
+      },
+    });
+
+    console.log("\n\n[CLAUDE CODE TRIGGER - GENERAL FEEDBACK]");
+    console.log("=".repeat(80));
+    console.log(JSON.stringify(feedbackData, null, 2));
+    console.log("=".repeat(80));
+    console.log(`Prompt file: ${promptFile}`);
+    console.log(`Feedback queue: ${feedbackFile}`);
+    console.log("=".repeat(80));
+    console.log("\n");
+
+    return true; // Processed feedback
+  } catch (error) {
+    console.error(`[ERROR] General feedback polling error:`, error);
+    return false;
+  }
+}
+
 // Check for workspaces with pending feedback
 async function pollForWorkspaceFeedback() {
   try {
@@ -525,11 +739,21 @@ async function main() {
 
   // Set up polling interval
   const pollInterval = setInterval(async () => {
-    await pollForWorkspaceFeedback();
+    // Check for general feedback first (priority)
+    const processedGeneralFeedback = await pollForGeneralFeedback();
+
+    // Only check workspace feedback if we didn't process general feedback
+    // This ensures we process one thing at a time
+    if (!processedGeneralFeedback) {
+      await pollForWorkspaceFeedback();
+    }
   }, POLL_INTERVAL);
 
   // Initial poll
-  await pollForWorkspaceFeedback();
+  const processedGeneralFeedback = await pollForGeneralFeedback();
+  if (!processedGeneralFeedback) {
+    await pollForWorkspaceFeedback();
+  }
 
   // Keep process alive
   process.on("SIGTERM", async () => {
