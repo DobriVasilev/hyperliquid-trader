@@ -15,6 +15,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { ClaudeExecutionPanel } from "./ClaudeExecutionPanel";
+import { QueueManagementPanel } from "./QueueManagementPanel";
 
 interface SystemHealth {
   watcher: {
@@ -341,6 +342,12 @@ export function AdminDashboard() {
 
         {/* Claude Code Execution Panel */}
         <ClaudeExecutionPanel />
+
+        {/* Divider */}
+        <div className="border-t border-gray-800 my-8" />
+
+        {/* Queue Management Panel */}
+        <QueueManagementPanel />
       </div>
     </div>
   );
