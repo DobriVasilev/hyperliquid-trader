@@ -100,7 +100,7 @@ function aggregateSessionCorrections(session: any) {
 }
 
 // Generate workspace prompt from aggregated feedback
-function generateWorkspacePrompt(workspace: any, sessions: any[]): string {
+async function generateWorkspacePrompt(workspace: any, sessions: any[], recentFailures: any[]): Promise<string> {
   let prompt = `# 🔧 Pattern Implementation Feedback\n\n`;
   prompt += `**Pattern:** ${workspace.name} (${workspace.patternType})\n`;
   prompt += `**Category:** ${workspace.category}\n`;
@@ -173,12 +173,26 @@ function generateWorkspacePrompt(workspace: any, sessions: any[]): string {
           prompt += `\n`;
         }
 
-        // Show attachments
+        // Show attachments (with image paths for Claude Code)
         if (item.attachments && Array.isArray(item.attachments) && item.attachments.length > 0) {
-          prompt += `   Attachments:\n`;
+          prompt += `   📎 **Chart Screenshots:**\n`;
           for (const att of item.attachments) {
-            prompt += `   - ${att.name || att.url}\n`;
+            const fileName = att.name || att.url.split('/').pop();
+            const fileType = att.type || '';
+
+            // Include full path to image for Claude Code to read
+            if (fileType.startsWith('image/')) {
+              // Convert relative public URL to absolute file path
+              const publicPath = att.url.replace(/^\//, ''); // Remove leading slash
+              const absolutePath = path.join(process.cwd(), 'public', publicPath);
+
+              prompt += `   - **${fileName}**: \`${absolutePath}\`\n`;
+              prompt += `     (This chart shows the ${correction.type.replace(/_/g, ' ')} issue)\n`;
+            } else {
+              prompt += `   - ${fileName}: ${att.url}\n`;
+            }
           }
+          prompt += `\n   ℹ️  Please analyze these chart images to understand the exact price action context.\n`;
         }
 
         prompt += `\n`;
@@ -217,15 +231,100 @@ function generateWorkspacePrompt(workspace: any, sessions: any[]): string {
     prompt += `\n`;
   }
 
+  // Recent test failures for context
+  if (recentFailures && recentFailures.length > 0) {
+    prompt += `## ⚠️ Recent Test Failures\n\n`;
+    prompt += `The following recent executions failed. Please consider these when implementing fixes:\n\n`;
+
+    for (let i = 0; i < Math.min(recentFailures.length, 5); i++) {
+      const failure = recentFailures[i];
+      prompt += `### Failure ${i + 1} (${new Date(failure.triggeredAt).toLocaleString()})\n\n`;
+      prompt += `**Error:** ${failure.error || 'Unknown error'}\n`;
+
+      if (failure.phase) {
+        prompt += `**Phase:** ${failure.phase}\n`;
+      }
+
+      if (failure.retryCount > 0) {
+        prompt += `**Retry Attempts:** ${failure.retryCount}\n`;
+      }
+
+      prompt += `\n`;
+    }
+
+    prompt += `---\n\n`;
+  }
+
+  // Pattern behavior guidelines
+  if (workspace.rules || workspace.constraints || workspace.commonMistakes) {
+    prompt += `## 📋 Pattern Guidelines\n\n`;
+
+    if (workspace.rules) {
+      prompt += `### Rules\n`;
+      const rules = workspace.rules as any;
+      if (Array.isArray(rules)) {
+        rules.forEach((rule: string, i: number) => {
+          prompt += `${i + 1}. ${rule}\n`;
+        });
+      } else if (typeof rules === 'object') {
+        for (const [key, value] of Object.entries(rules)) {
+          prompt += `- **${key}:** ${value}\n`;
+        }
+      }
+      prompt += `\n`;
+    }
+
+    if (workspace.constraints) {
+      prompt += `### Constraints\n`;
+      const constraints = workspace.constraints as any;
+      if (Array.isArray(constraints)) {
+        constraints.forEach((constraint: string, i: number) => {
+          prompt += `${i + 1}. ${constraint}\n`;
+        });
+      } else if (typeof constraints === 'object') {
+        for (const [key, value] of Object.entries(constraints)) {
+          prompt += `- **${key}:** ${value}\n`;
+        }
+      }
+      prompt += `\n`;
+    }
+
+    if (workspace.commonMistakes) {
+      prompt += `### Common Mistakes to Avoid\n`;
+      const mistakes = workspace.commonMistakes as any;
+      if (Array.isArray(mistakes)) {
+        mistakes.forEach((mistake: string, i: number) => {
+          prompt += `${i + 1}. ${mistake}\n`;
+        });
+      } else if (typeof mistakes === 'object') {
+        for (const [key, value] of Object.entries(mistakes)) {
+          prompt += `- **${key}:** ${value}\n`;
+        }
+      }
+      prompt += `\n`;
+    }
+  }
+
   // Task
   prompt += `## 🎯 Task\n\n`;
   prompt += `Please review the corrections from testing sessions and update the pattern implementation accordingly. `;
   prompt += `Ensure all corrections are properly addressed and the pattern accurately identifies the described price action behavior.\n\n`;
 
+  if (recentFailures && recentFailures.length > 0) {
+    prompt += `**Important:** Pay special attention to the recent test failures listed above. `;
+    prompt += `Make sure your implementation addresses the root causes of these failures.\n\n`;
+  }
+
+  prompt += `**When analyzing chart screenshots:**\n`;
+  prompt += `- Carefully examine the exact price points and timestamps\n`;
+  prompt += `- Look for visual patterns that the algorithm should detect\n`;
+  prompt += `- Consider candle wicks vs. closes for pattern identification\n`;
+  prompt += `- Validate against the pattern rules and constraints\n\n`;
+
   prompt += `After implementing the fixes:\n`;
   prompt += `1. Update the pattern version number\n`;
   prompt += `2. Run tests to verify the changes\n`;
-  prompt += `3. Commit with a descriptive message\n`;
+  prompt += `3. Commit with a descriptive message explaining what was fixed\n`;
   prompt += `4. The system will automatically monitor the deployment\n\n`;
 
   return prompt;
@@ -336,8 +435,27 @@ async function pollForWorkspaceFeedback() {
 
     // Note: Sessions remain in "submitted_for_review" status until implementation completes
 
+    // Query for recent failed executions for this workspace
+    const recentFailures = await prisma.claudeExecution.findMany({
+      where: {
+        workspaceId: targetWorkspace.id,
+        status: "failed",
+      },
+      orderBy: {
+        triggeredAt: "desc",
+      },
+      take: 5,
+      select: {
+        id: true,
+        error: true,
+        phase: true,
+        retryCount: true,
+        triggeredAt: true,
+      },
+    });
+
     // Generate prompt
-    const prompt = generateWorkspacePrompt(targetWorkspace, targetSessions);
+    const prompt = await generateWorkspacePrompt(targetWorkspace, targetSessions, recentFailures);
 
     // Write prompt to file
     const promptFile = path.join(WORKSPACE_DIR, "prompts", `${execution.id}.md`);

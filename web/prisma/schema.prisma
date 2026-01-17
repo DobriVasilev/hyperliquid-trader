@@ -339,8 +339,13 @@ model PatternWorkspace {
   // Pattern description (for SOON patterns)
   description         String?  @db.Text
   userReasoning       String?  @db.Text
-  identificationSteps Json? // Array of steps: [{step: "Look for...", detail: "..."}]
+  identificationSteps Json?    // Array of steps: [{step: "Look for...", detail: "..."}]
   attachments         String[] // URLs to images/videos submitted by user
+
+  // Pattern behavior guidelines (for Claude Code context)
+  rules          Json? // Array or object of pattern rules
+  constraints    Json? // Array or object of constraints
+  commonMistakes Json? // Array or object of common mistakes to avoid
 
   // Statistics (denormalized for performance)
   sessionCount  Int       @default(0)
